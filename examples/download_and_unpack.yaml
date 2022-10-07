@@ -1,0 +1,24 @@
+operators:
+# Literals
+- name: modpack-uri
+  kind: URI
+  value: "https://cdn.modrinth.com/data/p87Jiw2q/versions/6D8o98Bp/LostEra_modpack_1.5.2a.mrpack"
+- name: path-filter
+  kind: Regex
+  value: "modrinth\\.index\\.json|overrides/config/NuclearCraft/ToolConfig\\.cfg"
+- name: output-path
+  kind: Path
+  value: "./output"
+
+# Operators
+- name: download-modpack
+  kind: ArchiveDownloader
+  uri: modpack-uri
+- name: filter
+  kind: ArchiveFilter
+  archive: download-modpack
+  path_regex: path-filter
+- name: write
+  kind: FileWriter
+  archive: filter
+  destination: output-path
