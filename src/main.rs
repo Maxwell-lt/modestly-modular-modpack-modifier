@@ -47,21 +47,28 @@ fn main() -> Result<()> {
         loop {
             let popped_node = to_visit.pop_front();
             if let Some(node) = popped_node {
-                println!("Popped {}", node);
                 if !visited_nodes.contains(&node) {
-                    nodes_in_order.push(node.to_owned());
-                    visited_nodes.insert(node.to_owned());
-                    let matrix_index = indices.binary_search(&&node).expect("Name not found in adjacency list!");
-                    for edge in 0..operator_count {
-                        // Swapping col and row to search the transpose of the adjacency matrix,
-                        // which is equivalent to the transpose of the digraph (all edges
-                        // have inverted direction)
-                        if adjacency_matrix[edge][matrix_index] {
-                            let name = *indices.get(edge).context("Tried to find a node by index in alphabetical order")?;
-                            if !visited_nodes.contains(name) && !to_visit.contains(name) {
-                                to_visit.push_back(name.to_owned());
+                    if visited_nodes.is_superset(&HashSet::from_iter(adjacency_list
+                                                                     .get(&node)
+                                                                     .context("Name not found in adjacency list!")?
+                                                                     .iter()
+                                                                     .map(|s| s.to_owned()))) {
+                        nodes_in_order.push(node.to_owned());
+                        visited_nodes.insert(node.to_owned());
+                        let matrix_index = indices.binary_search(&&node).expect("Name not found in adjacency list!");
+                        for edge in 0..operator_count {
+                            // Swapping col and row to search the transpose of the adjacency matrix,
+                            // which is equivalent to the transpose of the digraph (all edges
+                            // have inverted direction)
+                            if adjacency_matrix[edge][matrix_index] {
+                                let name = *indices.get(edge).context("Tried to find a node by index in alphabetical order")?;
+                                if !visited_nodes.contains(name) && !to_visit.contains(name) {
+                                    to_visit.push_back(name.to_owned());
+                                }
                             }
                         }
+                    } else {
+                        to_visit.push_back(node);
                     }
                 }
             } else {
@@ -71,15 +78,11 @@ fn main() -> Result<()> {
         nodes_in_order
     };
 
-    for (k, v) in adjacency_list {
-        println!("{} => {:?}", k, v);
-    }
-    println!("{:?}", node_order);
-
     // Run operators
     let mut calculated_operators: HashMap<String, CalculatedOperator> = HashMap::new();
     for node in node_order {
         let config: &OperatorConfig = config_map.get(&node).context("Node not found in map!")?;
+        println!("Executing step: {:?}", config);
         match config {
             OperatorConfig::URI { name, value } => {
                 calculated_operators.insert(name.to_owned(), CalculatedOperator::Str(Box::new(URILiteral::new(value))));
