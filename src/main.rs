@@ -1,12 +1,11 @@
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap, BTreeMap, VecDeque, HashSet};
 use std::fs::File;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use operators::model::Operators;
 use options::Options;
-use walkdir::WalkDir;
 
-use crate::operators::model::OperatorConfig;
+use crate::operators::model::{OperatorConfig, CalculatedOperator};
 use crate::operators::operators::*;
 
 
@@ -19,7 +18,7 @@ fn main() -> Result<()> {
         File::open(&opt.config_file).context(format!("Failed to open config file {}", opt.config_file.to_string_lossy()))?)
         .context("Failed to parse YAML")?;
 
-    println!("{:?}", config);
+    let operator_count = config.operators.len();
 
     let config_map: HashMap<String, OperatorConfig> = config.operators.
         into_iter()
@@ -32,7 +31,103 @@ fn main() -> Result<()> {
 
     let adjacency_matrix = create_adjacency_matrix(&adjacency_list)?;
 
-    println!("{:?}\n{:?}", adjacency_list, adjacency_matrix);
+    // Find operators with no dependencies
+    let root_nodes: Vec<String> = adjacency_matrix.iter()
+        .zip(adjacency_list.keys())
+        .filter(|(row, _name)| row.iter().all(|cell| cell == &false))
+        .map(|(_row, name)| name.to_owned())
+        .collect();
+
+    // BFS over the transpose of the graph
+    let node_order: Vec<String> = {
+        let indices: Vec<&String> = adjacency_list.keys().collect();
+        let mut nodes_in_order: Vec<String> = Vec::with_capacity(operator_count);
+        let mut visited_nodes: HashSet<String> = HashSet::with_capacity(operator_count);
+        let mut to_visit = VecDeque::from_iter(root_nodes);
+        loop {
+            let popped_node = to_visit.pop_front();
+            if let Some(node) = popped_node {
+                println!("Popped {}", node);
+                if !visited_nodes.contains(&node) {
+                    nodes_in_order.push(node.to_owned());
+                    visited_nodes.insert(node.to_owned());
+                    let matrix_index = indices.binary_search(&&node).expect("Name not found in adjacency list!");
+                    for edge in 0..operator_count {
+                        // Swapping col and row to search the transpose of the adjacency matrix,
+                        // which is equivalent to the transpose of the digraph (all edges
+                        // have inverted direction)
+                        if adjacency_matrix[edge][matrix_index] {
+                            let name = *indices.get(edge).context("Tried to find a node by index in alphabetical order")?;
+                            if !visited_nodes.contains(name) && !to_visit.contains(name) {
+                                to_visit.push_back(name.to_owned());
+                            }
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        nodes_in_order
+    };
+
+    for (k, v) in adjacency_list {
+        println!("{} => {:?}", k, v);
+    }
+    println!("{:?}", node_order);
+
+    // Run operators
+    let mut calculated_operators: HashMap<String, CalculatedOperator> = HashMap::new();
+    for node in node_order {
+        let config: &OperatorConfig = config_map.get(&node).context("Node not found in map!")?;
+        match config {
+            OperatorConfig::URI { name, value } => {
+                calculated_operators.insert(name.to_owned(), CalculatedOperator::Str(Box::new(URILiteral::new(value))));
+            },
+            OperatorConfig::Path { name, value } => {
+                calculated_operators.insert(name.to_owned(), CalculatedOperator::Path(Box::new(PathLiteral::new(value))));
+            },
+            OperatorConfig::Regex { name, value } => {
+                calculated_operators.insert(name.to_owned(), CalculatedOperator::Regex(Box::new(RegexLiteral::new(value)?)));
+            },
+            OperatorConfig::ArchiveDownloader { name, uri } => {
+                let uri_operator = calculated_operators.get(uri)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", uri, name))?;
+                if let CalculatedOperator::Str(uri) = uri_operator {
+                    calculated_operators.insert(name.to_owned(), CalculatedOperator::Folder(Box::new(ArchiveDownloader::new(&uri.output()?)?)));
+                } else {
+                    bail!(format!("Operator {} expected to be type URI!", uri));
+                }
+            },
+            OperatorConfig::ArchiveFilter { name, archive, path_regex } => {
+                let archive_operator = calculated_operators.get(archive)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", archive, name))?;
+                let path_regex_operator = calculated_operators.get(path_regex)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", path_regex, name))?;
+                if let (CalculatedOperator::Folder(path), CalculatedOperator::Regex(regex)) = (archive_operator, path_regex_operator) {
+                    calculated_operators.insert(name.to_owned(),
+                    CalculatedOperator::Folder(Box::new(ArchiveFilter::new(regex.output()?, path.output()?)?)));
+                } else {
+                    bail!(format!("One of these operators expected to be a different type: {}, {}", archive, path_regex));
+                }
+            },
+            OperatorConfig::FileWriter { name, archive, destination } => {
+                let archive_operator = calculated_operators.get(archive)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", archive, name))?;
+                let destination_operator = calculated_operators.get(destination)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", destination, name))?;
+                if let (CalculatedOperator::Folder(src), CalculatedOperator::Path(dest)) = (archive_operator, destination_operator) {
+                    calculated_operators.insert(name.to_owned(),
+                    CalculatedOperator::Terminal(Box::new(FileWriter::new(src.output()?, &dest.output()?)?)));
+                } else {
+                    bail!(format!("One of these operators expected to be a different type: {}, {}", archive, destination));
+                }
+            },
+            _ => {
+                bail!("Hit unimplemented operator!");
+            },
+        };
+    }
     
     //let uri = URILiteral::new("https://cdn.modrinth.com/data/p87Jiw2q/versions/6D8o98Bp/LostEra_modpack_1.5.2a.mrpack".to_string());
     //let regex = RegexLiteral::new("modrinth\\.index\\.json|overrides/config/NuclearCraft/ToolConfig\\.cfg".to_string())?;

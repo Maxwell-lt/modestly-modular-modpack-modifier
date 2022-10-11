@@ -21,9 +21,9 @@ pub struct URILiteral {
 }
 
 impl URILiteral {
-    pub fn new(value: String) -> URILiteral {
+    pub fn new(value: &str) -> URILiteral {
         URILiteral {
-            value,
+            value: value.to_owned(),
         }
     }
 }
@@ -39,7 +39,7 @@ pub struct PathLiteral {
 }
 
 impl PathLiteral {
-    pub fn new(value: String) -> PathLiteral {
+    pub fn new(value: &str) -> PathLiteral {
         PathLiteral {
             value: PathBuf::from(value),
         }
@@ -57,9 +57,9 @@ pub struct RegexLiteral {
 }
 
 impl RegexLiteral {
-    pub fn new(value: String) -> Result<RegexLiteral> {
+    pub fn new(value: &str) -> Result<RegexLiteral> {
         Ok(RegexLiteral {
-            value: Regex::new(&value)?,
+            value: Regex::new(value)?,
         })
     }
 }
@@ -75,7 +75,7 @@ pub struct ArchiveDownloader {
 }
 
 impl ArchiveDownloader {
-    pub fn new(src: String) -> Result<ArchiveDownloader> {
+    pub fn new(src: &str) -> Result<ArchiveDownloader> {
         let tempdir = TempDir::new("ArchiveDownloader")?;
         let bytes = reqwest::blocking::get(src)?.bytes()?;
         let mut archive = ZipArchive::new(Cursor::new(bytes))?;
@@ -136,5 +136,11 @@ impl FileWriter {
             .overwrite(true)
             .run()?;
         Ok(FileWriter {})
+    }
+}
+
+impl Operator<()> for FileWriter {
+    fn output(&self) -> Result<()> {
+        Ok(())
     }
 }

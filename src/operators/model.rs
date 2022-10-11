@@ -1,4 +1,10 @@
+use std::path::PathBuf;
+
+use regex::Regex;
 use serde::{Serialize, Deserialize};
+use tempdir::TempDir;
+
+use super::operators::Operator;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "kind")]
@@ -23,27 +29,36 @@ pub struct Operators {
 impl OperatorConfig {
     pub fn get_name(&self) -> String {
         match self {
-            Self::URI { name, value } => name.to_owned(),
-            Self::Path { name, value } => name.to_owned(),
-            Self::Number { name, value } => name.to_owned(),
-            Self::Text { name, value } => name.to_owned(),
-            Self::Regex { name, value } => name.to_owned(),
-            Self::ArchiveDownloader { name, uri } => name.to_owned(),
-            Self::ArchiveFilter { name, archive, path_regex } => name.to_owned(),
-            Self::FileWriter { name, archive, destination } => name.to_owned(),
+            Self::URI { name, .. } => name.to_owned(),
+            Self::Path { name, .. } => name.to_owned(),
+            Self::Number { name, .. } => name.to_owned(),
+            Self::Text { name, .. } => name.to_owned(),
+            Self::Regex { name, .. } => name.to_owned(),
+            Self::ArchiveDownloader { name, .. } => name.to_owned(),
+            Self::ArchiveFilter { name, .. } => name.to_owned(),
+            Self::FileWriter { name, .. } => name.to_owned(),
         }
     }
 
     pub fn get_refs(&self) -> Vec<String> {
         match self {
-            Self::URI { name, value } => Vec::new(),
-            Self::Path { name, value } => Vec::new(),
-            Self::Number { name, value } => Vec::new(),
-            Self::Text { name, value } => Vec::new(),
-            Self::Regex { name, value } => Vec::new(),
-            Self::ArchiveDownloader { name, uri } => vec![uri.to_owned()],
-            Self::ArchiveFilter { name, archive, path_regex } => vec![archive.to_owned(), path_regex.to_owned()],
-            Self::FileWriter { name, archive, destination } => vec![archive.to_owned(), destination.to_owned()],
+            Self::URI { .. } => Vec::new(),
+            Self::Path { .. } => Vec::new(),
+            Self::Number { .. } => Vec::new(),
+            Self::Text { .. } => Vec::new(),
+            Self::Regex { .. } => Vec::new(),
+            Self::ArchiveDownloader { uri, .. } => vec![uri.to_owned()],
+            Self::ArchiveFilter { archive, path_regex, .. } => vec![archive.to_owned(), path_regex.to_owned()],
+            Self::FileWriter { archive, destination, .. } => vec![archive.to_owned(), destination.to_owned()],
         }
     }
+}
+
+pub enum CalculatedOperator {
+    Str(Box<dyn Operator<String>>),
+    Number(Box<dyn Operator<i64>>),
+    Path(Box<dyn Operator<PathBuf>>),
+    Regex(Box<dyn Operator<Regex>>),
+    Folder(Box<dyn Operator<TempDir>>),
+    Terminal(Box<dyn Operator<()>>),
 }
