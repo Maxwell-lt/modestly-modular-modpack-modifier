@@ -1,8 +1,8 @@
 use std::fs::{remove_dir, remove_file};
-use std::path::{PathBuf, Path};
 use std::io::Cursor;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Result, Ok};
+use anyhow::{Ok, Result};
 use dircpy::{copy_dir, CopyBuilder};
 use regex::Regex;
 use tempdir::TempDir;
@@ -80,9 +80,7 @@ impl ArchiveDownloader {
         let bytes = reqwest::blocking::get(src)?.bytes()?;
         let mut archive = ZipArchive::new(Cursor::new(bytes))?;
         archive.extract(tempdir.path())?;
-        Ok(ArchiveDownloader { 
-            archive: tempdir,
-        })
+        Ok(ArchiveDownloader { archive: tempdir })
     }
 }
 
@@ -112,9 +110,7 @@ impl ArchiveFilter {
                 }
             }
         }
-        Ok(ArchiveFilter {
-            archive: dir,
-        })
+        Ok(ArchiveFilter { archive: dir })
     }
 }
 
@@ -126,8 +122,7 @@ impl Operator<TempDir> for ArchiveFilter {
     }
 }
 
-pub struct FileWriter {
-}
+pub struct FileWriter {}
 
 impl FileWriter {
     /// Copies all files from the input directory to the destination directory.
