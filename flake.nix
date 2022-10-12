@@ -42,7 +42,7 @@
 
 	  doCheck = false;  # The tests require internet access.
 
-	  cargoSha256 = "sha256-4ri7iGZXHkUyrfQw5qA4qUEdTYWyV0gyDl21PvipEJg=";
+	  cargoSha256 = "sha256-VmOLD223o5qOJvLAk5wfxYT5vuAgg2SlgVMtsK/aU0g=";
 	};
   });
 }
