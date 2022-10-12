@@ -1,4 +1,4 @@
-use std::collections::{HashMap, BTreeMap, VecDeque, HashSet};
+use std::collections::{HashMap, BTreeMap, VecDeque};
 use std::fs::File;
 
 use anyhow::{Context, Result, bail};
@@ -14,69 +14,15 @@ mod options;
 
 fn main() -> Result<()> {
     let opt: Options = options::parse();
-    let config: Operators = serde_yaml::from_reader(
+    let config_map: HashMap<String, OperatorConfig> = serde_yaml::from_reader::<File, Operators>(
         File::open(&opt.config_file).context(format!("Failed to open config file {}", opt.config_file.to_string_lossy()))?)
-        .context("Failed to parse YAML")?;
-
-    let operator_count = config.operators.len();
-
-    let config_map: HashMap<String, OperatorConfig> = config.operators.
-        into_iter()
+        .context("Failed to parse YAML")?
+        .operators
+        .into_iter()
         .map(|o| (o.get_name(), o))
         .collect();
 
-    let adjacency_list: BTreeMap<String, Vec<String>> = config_map.iter()
-        .map(|(k, v)| (k.to_owned(), v.get_refs()))
-        .collect();
-
-    let adjacency_matrix = create_adjacency_matrix(&adjacency_list)?;
-
-    // Find operators with no dependencies
-    let root_nodes: Vec<String> = adjacency_matrix.iter()
-        .zip(adjacency_list.keys())
-        .filter(|(row, _name)| row.iter().all(|cell| cell == &false))
-        .map(|(_row, name)| name.to_owned())
-        .collect();
-
-    // BFS over the transpose of the graph
-    let node_order: Vec<String> = {
-        let indices: Vec<&String> = adjacency_list.keys().collect();
-        let mut nodes_in_order: Vec<String> = Vec::with_capacity(operator_count);
-        let mut visited_nodes: HashSet<String> = HashSet::with_capacity(operator_count);
-        let mut to_visit = VecDeque::from_iter(root_nodes);
-        loop {
-            let popped_node = to_visit.pop_front();
-            if let Some(node) = popped_node {
-                if !visited_nodes.contains(&node) {
-                    if visited_nodes.is_superset(&HashSet::from_iter(adjacency_list
-                                                                     .get(&node)
-                                                                     .context("Name not found in adjacency list!")?
-                                                                     .iter()
-                                                                     .map(|s| s.to_owned()))) {
-                        nodes_in_order.push(node.to_owned());
-                        visited_nodes.insert(node.to_owned());
-                        let matrix_index = indices.binary_search(&&node).expect("Name not found in adjacency list!");
-                        for edge in 0..operator_count {
-                            // Swapping col and row to search the transpose of the adjacency matrix,
-                            // which is equivalent to the transpose of the digraph (all edges
-                            // have inverted direction)
-                            if adjacency_matrix[edge][matrix_index] {
-                                let name = *indices.get(edge).context("Tried to find a node by index in alphabetical order")?;
-                                if !visited_nodes.contains(name) && !to_visit.contains(name) {
-                                    to_visit.push_back(name.to_owned());
-                                }
-                            }
-                        }
-                    } else {
-                        to_visit.push_back(node);
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-        nodes_in_order
-    };
+    let node_order = topological_sort(&config_map)?;
 
     // Run operators
     let mut calculated_operators: HashMap<String, CalculatedOperator> = HashMap::new();
@@ -131,30 +77,6 @@ fn main() -> Result<()> {
             },
         };
     }
-    
-    //let uri = URILiteral::new("https://cdn.modrinth.com/data/p87Jiw2q/versions/6D8o98Bp/LostEra_modpack_1.5.2a.mrpack".to_string());
-    //let regex = RegexLiteral::new("modrinth\\.index\\.json|overrides/config/NuclearCraft/ToolConfig\\.cfg".to_string())?;
-
-    //let downloader = ArchiveDownloader::new(uri.output()?)?;
-    //let filter = ArchiveFilter::new(regex.output()?, downloader.output()?)?;
-
-    //println!("Downloaded files:");
-    //let tempdir = downloader.output()?;
-    //for file in WalkDir::new(tempdir.path()) {
-    //    let file = file?;
-    //    println!("{}", file.path().to_string_lossy());
-    //}
-
-    //println!("Filtered files:");
-    //let tempdir = filter.output()?;
-    //for file in WalkDir::new(tempdir.path()) {
-    //    let file = file?;
-    //    println!("{}", file.path().to_string_lossy());
-    //}
-
-    //let outpath = PathLiteral::new("./output".to_string());
-    //println!("{}", outpath.output()?.as_path().canonicalize()?.to_string_lossy());
-    //FileWriter::new(filter.output()?, &outpath.output()?)?;
 
     Ok(())
 }
@@ -177,4 +99,44 @@ fn create_adjacency_matrix(map: &BTreeMap<String, Vec<String>>) -> Result<Vec<Ve
     }
 
     Ok(matrix)
+}
+
+fn topological_sort(config_map: &HashMap<String, OperatorConfig>) -> Result<Vec<String>> {
+    // Build graph representations
+    let adjacency_list: BTreeMap<String, Vec<String>> = config_map.iter()
+        .map(|(k, v)| (k.to_owned(), v.get_refs()))
+        .collect();
+    let mut matrix = create_adjacency_matrix(&adjacency_list)?;
+
+    // Find operators with no dependencies (indegree 0)
+    let root_nodes: Vec<String> = matrix.iter()
+        .zip(adjacency_list.keys())
+        .filter(|(row, _name)| row.iter().all(|cell| cell == &false))
+        .map(|(_row, name)| name.to_owned())
+        .collect();
+
+    // Index of node names in same order as adjacency_list and matrix
+    let indices: Vec<&String> = adjacency_list.keys().collect();
+    let operator_count = config_map.len();
+    let mut nodes_in_order: Vec<String> = Vec::with_capacity(operator_count);
+    let mut s = VecDeque::from_iter(root_nodes);
+    loop {
+        if let Some(node) = s.pop_front() {
+            nodes_in_order.push(node.to_owned());
+            let col = indices.binary_search(&&node).expect("Name not found in adjacency list!");
+            for row in 0..operator_count {
+                if matrix[row][col] {
+                    let m = indices[row];
+                    matrix[row][col] = false;
+                    if matrix[row].iter().all(|x| *x == false) {
+                        s.push_back(m.to_owned());
+                    }
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    Ok(nodes_in_order)
 }
