@@ -1,0 +1,114 @@
+= Design ideas
+
+== Overview
+YAML file describes DAG where each node can accept inputs, process data, and return outputs.
+
+Nodes might include:
+
+* Literals (string, number, URI)
+** Allow literal inputs to be inlined in YAML?
+* URI fetcher/file download
+* Archive extractor
+* Get file by path from filetree
+* Minecraft specific:
+** Curse manifest -> github:erisia/builder YAML manifest
+** github:erisia/builder YAML -> .nix
+* Filetree filter
+** exclude list? include list? both?
+* File patcher
+** Git-style diffs?
+** Apply to file or filetree?
+
+== Node Architecture
+[%hardbreaks]
+Each node runs in a separate thread (tokio?).
+Nodes read input from/send output to broadcast SPMC channels.
+Node threads block until all channels return output, then begin processing.
+Inputs to nodes are cloned by channel, no interference between threads on data.
+All datatypes passed must implement Clone.
+Additional channels for nodes to stream status/logs to main thread.
+(this feels like a golang style design, but I want the compile-time checks of Rust)
+
+=== How to instantiate nodes?
+Bespoke DI container?
+
+* Holds threadsafe references to useful globals
+** HTTP client for 429 handling
+** API secrets from env
+** Misc. config?
+* Pass `&ref` of container to node constructor, which then copies references of required components into self, trait for "has constructor accepting DI cont."
+
+=== How to wire outputs to inputs?
+* Nodes have unique names
+* Create a broadcast channel for each output
+** Map-style structure, get channel by node name, output name(, in vs. out)
+** DI container owns map
+* Node construction copies output, moves input end (is this move possible?)
+* Channels are generic (enum by datatype)
+** Constructor ``match``es each of its inputs to validate types
+** Constructor returns Err if `match` fails
+
+=== How to synchronize node starts? Is it necessary?
+* Channel implementation dependent
+** If messages only reach rx ends that are currently blocking, instantiation order matters; have to walk graph and wait for all children to begin blocking before starting parent
+** If message history is retained, nodes can be started in any order
+*** `tokio::sync::broadcast` looks promising:
+**** Messages in channel are retained until all Recievers have read
+**** If storing at least one Receiver in DI container, this means memory will "leak" as messages will never be dropped
+**** Once channel fills to capacity with unread messages, further messages will cause oldest to be dropped and Receivers will be given RecvError::Lagged
+**** However, as each channel will only have a single output message sent in its lifetime, this doesn't matter
+*** If this holds, node can begin blocking as soon as constructor is called
+
+== File handling
+[%hardbreaks]
+Node outputs should be immutable, no edit in place
+Duplicated files in memory not feasible
+Filetrees represented as nested `Directory` objects
+
+* `Directory` holds list of child `Directory` objects
+* `Directory` holds list of child `File` objects
+* `File` and `Directory` wrapped by same enum
+* ``File``/``Directory`` list has metadata in filetree level
+** permissions/ownership/binary vs text?/?
+* `File` holds hash string
+
+Separate shared content addressible store holds files indexed by hash
+
+* Memory safe insert/retrieve
+* Pass file bytes to store, store returns hash
+* If store already has hash, do not overwrite file (or do? hopefully no collisions)
+* Pass hash to store, store returns file bytes
+
+[%hardbreaks]
+File store holds only file contents, file tree holds directory structure, filenames, metadata
+File tree memory cost should be low enough to allow frequent cloning
+Renaming, moving, deleting files from tree has low cost
+File store can be abstract, with multiple backends for incremental development without changing interface
+
+* In-memory
+* DB
+* Filesystem
+
+== O11y/UI
+[%hardbreaks]
+Nodes can stream log messages/progress meter updates through channels
+Build abstraction layer for reading messages
+
+* Get DAG structure (nodes/channels)
+* Get logs for a node
+* Get progress for a node
+
+Build UI layers
+
+* CLI
+** Write log messages directly to stdout
+* TUI
+** Display DAG visualization with progress indicators
+** Log view?
+* Web
+** Display DAG visualization with progress indicators
+** Request/WS stream logs from backend
+
+Should abstraction layer fetch data from node outputs? Should it expose this data?
+
+Look into Tokio tracing for exposing log messages

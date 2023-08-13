@@ -1,0 +1,9 @@
+= Modestly Modular Modpack Modifier
+
+WIP attempt at building a successor to https://github.com/Erisia/cursetool-rs[Erisia/cursetool-rs].
+
+While cursetool only supports conversion of a human-writable manifest into the Nix file used by https://github.com/Erisia/builder[Erisia/builder],
+this tool aims to be a full-service modpack builder, allowing workflows to be defined which will pull a pack from Curse/Modrinth/etc., edit mod lists,
+patch config files, output a Nix manifest and static pack files, and more.
+
+Workflows will be YAML files that define a DAG of operations to be done, and the connections between each operation. See `design.adoc` for vague ideas on how this will be accomplished.

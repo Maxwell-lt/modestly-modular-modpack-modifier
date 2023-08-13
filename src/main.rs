@@ -10,6 +10,7 @@ use crate::operators::operators::*;
 
 mod operators;
 mod options;
+mod filetree;
 
 fn main() -> Result<()> {
     let opt: Options = options::parse();
