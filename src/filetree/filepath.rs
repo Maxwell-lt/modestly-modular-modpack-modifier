@@ -14,10 +14,12 @@ impl FilePath {
         &self.name
     }
 
-    /// Returns the name of the directory at provided recursion level,
-    /// or [`None`] if the recursion level points to the filename or deeper.
-    pub(crate) fn get_dir_at(&self, level: usize) -> Option<&str> {
-        self.dirs.get(level).map(|s| s.as_ref())
+    pub(crate) fn get_components(&self) -> Vec<String> {
+        self.dirs
+            .iter()
+            .chain(std::iter::once(&self.name))
+            .map(String::to_owned)
+            .collect::<Vec<String>>()
     }
 }
 
@@ -25,6 +27,9 @@ impl FromStr for FilePath {
     type Err = anyhow::Error;
     
     fn from_str(path: &str) -> Result<Self, Self::Err> {
+        if path.chars().last() == Some('/') {
+            bail!("Got directory!");
+        }
         let parts: Vec<&str> = path
             .split("/")
             .filter(|s| !s.is_empty())
@@ -57,5 +62,47 @@ impl fmt::Display for FilePath {
         }
         write!(f, "{}", self.name)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn filters_blank_components() {
+        let path = FilePath::from_str("//hello/world//directory/test.txt").unwrap();
+        assert_eq!(path.to_string(), "hello/world/directory/test.txt");
+    }
+
+    #[test]
+    fn rejects_empty_path() {
+        let result = FilePath::from_str("/");
+        assert_eq!(result.is_err(), true);
+    }
+
+    #[test]
+    fn get_filename() {
+        let path = FilePath::from_str("test/path/file").unwrap();
+        assert_eq!(path.get_filename(), "file");
+    }
+
+    #[test]
+    fn get_components() {
+        let path = FilePath::from_str("test/path/file.txt").unwrap();
+        assert_eq!(path.get_components(), vec!["test", "path", "file.txt"])
+    }
+
+    #[test]
+    fn convert_from_path() {
+        let path: &Path = Path::new("test/path/file.txt");
+        let converted_path: FilePath = path.try_into().unwrap();
+        assert_eq!(converted_path.to_string(), "test/path/file.txt");
+    }
+
+    #[test]
+    fn reject_trailing_slash() {
+        let result = FilePath::from_str("this/is/a/directory/");
+        assert_eq!(result.is_err(), true);
     }
 }
