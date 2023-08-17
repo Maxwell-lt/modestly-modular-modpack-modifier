@@ -1,9 +1,9 @@
 use core::fmt;
 use std::{str::FromStr, path::Path};
+use thiserror::Error;
 
-use anyhow::bail;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FilePath {
     dirs: Vec<String>,
     name: String,
@@ -24,11 +24,14 @@ impl FilePath {
 }
 
 impl FromStr for FilePath {
-    type Err = anyhow::Error;
+    type Err = FilePathError;
     
     fn from_str(path: &str) -> Result<Self, Self::Err> {
         if path.chars().last() == Some('/') {
-            bail!("Got directory!");
+            return Err(FilePathError::DirectoryError(path.to_string()));
+        }
+        if path.chars().nth(0) == Some('/') {
+            return Err(FilePathError::AbsolutePathError(path.to_string()));
         }
         let parts: Vec<&str> = path
             .split("/")
@@ -42,13 +45,13 @@ impl FromStr for FilePath {
                     .collect::<Vec<String>>(),
             })
         } else {
-            bail!("Got empty path!");
+            return Err(FilePathError::PathEmptyError(path.to_string()));
         }
     }
 }
 
 impl TryFrom<&Path> for FilePath {
-    type Error = anyhow::Error;
+    type Error = FilePathError;
 
     fn try_from(value: &Path) -> Result<Self, Self::Error> {
         FilePath::from_str(&value.to_string_lossy())
@@ -65,20 +68,30 @@ impl fmt::Display for FilePath {
     }
 }
 
+#[derive(Error, Debug, PartialEq)]
+pub enum FilePathError {
+    #[error("provided path string resolved to an empty path (got path \"{0}\")")]
+    PathEmptyError(String),
+    #[error("provided path string resolved to a directory (got path \"{0}\")")]
+    DirectoryError(String),
+    #[error("provided path string is an absolute path (got path \"{0}\"")]
+    AbsolutePathError(String),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn filters_blank_components() {
-        let path = FilePath::from_str("//hello/world//directory/test.txt").unwrap();
-        assert_eq!(path.to_string(), "hello/world/directory/test.txt");
+        let path = FilePath::from_str("empty///components.txt").unwrap();
+        assert_eq!(path.to_string(), "empty/components.txt");
     }
 
     #[test]
     fn rejects_empty_path() {
-        let result = FilePath::from_str("/");
-        assert_eq!(result.is_err(), true);
+        let result = FilePath::from_str("");
+        assert_eq!(result.unwrap_err(), FilePathError::PathEmptyError("".to_string()));
     }
 
     #[test]
@@ -103,6 +116,13 @@ mod tests {
     #[test]
     fn reject_trailing_slash() {
         let result = FilePath::from_str("this/is/a/directory/");
-        assert_eq!(result.is_err(), true);
+        assert_eq!(result.unwrap_err(), FilePathError::DirectoryError("this/is/a/directory/".to_string()));
+    }
+
+    // I don't care all that much about Windows absolute paths at the moment.
+    #[test]
+    fn reject_unix_absolute_path() {
+        let result = FilePath::from_str("/etc/passwd");
+        assert_eq!(result.unwrap_err(), FilePathError::AbsolutePathError("/etc/passwd".to_string()));
     }
 }
