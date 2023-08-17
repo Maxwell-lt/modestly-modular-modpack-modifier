@@ -14,7 +14,9 @@
 	pkgs = import nixpkgs {
 	  inherit system overlays;
 	};
-	rust = pkgs.rust-bin.stable.latest.default;
+        rust = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "llvm-tools-preview" ];
+        };
 	rustPlatform = pkgs.makeRustPlatform {
 	  rustc = rust;
 	  cargo = rust;
@@ -25,6 +27,9 @@
 	    rust
             diffutils
             rust-analyzer
+            cargo-nextest
+            grcov
+            cargo-llvm-cov
 	  ];
 
 	  shellHook = ''
