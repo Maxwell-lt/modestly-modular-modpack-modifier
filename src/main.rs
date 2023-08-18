@@ -11,6 +11,8 @@ use crate::operators::operators::*;
 mod operators;
 mod options;
 mod filetree;
+mod node;
+mod di;
 
 fn main() -> Result<()> {
     let opt: Options = options::parse();
