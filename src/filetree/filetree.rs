@@ -7,7 +7,7 @@ use thiserror::Error;
 use super::filestore::FileStore;
 use super::filepath::FilePath;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct FileTree {
     // Should contents use String or FilePath as a key? String is *probably* cheaper (as FilePath
     // owns several strings internally), but FilePath as a key allows stronger guarantees on valid

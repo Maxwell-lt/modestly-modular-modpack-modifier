@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use anyhow::Result;
 use regex::Regex;
 use tokio::sync::broadcast;
+use serde::Deserialize;
 
 use crate::filetree::{filepath::FilePath, filetree::FileTree, filestore::FileStore};
 
@@ -47,8 +49,8 @@ pub(crate) enum OutputType {
 }
 
 /// Stores a channel ID by a tuple of (output node name, output name)
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub(crate) struct ChannelId(String, String);
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize)]
+pub struct ChannelId(pub String, pub String);
 
 impl DiContainer {
     pub(crate) fn new(configs: HashMap<String, String>, channels: HashMap<ChannelId, InputType>) -> Self {
@@ -73,6 +75,10 @@ impl DiContainer {
 
     pub(crate) fn get_waker(&self) -> broadcast::Receiver<()> {
         self.waker.subscribe()
+    }
+
+    pub(crate) fn run(&self) -> Result<usize> {
+        Ok(self.waker.send(())?)
     }
 }
 
