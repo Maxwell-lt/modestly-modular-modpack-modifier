@@ -5,10 +5,11 @@ YAML file describes DAG where each node can accept inputs, process data, and ret
 
 Nodes might include:
 
-* Literals (string, number, URI)
+* Literals (string, number)
 ** Allow literal inputs to be inlined in YAML?
 * URI fetcher/file download
 * Archive extractor
+** Archive extractor should receive download URL, no point in loading entire packed archive into filestore
 * Get file by path from filetree
 * Minecraft specific:
 ** Curse manifest -> github:erisia/builder YAML manifest
@@ -32,45 +33,43 @@ Additional channels for nodes to stream status/logs to main thread.
 === How to instantiate nodes?
 Bespoke DI container?
 
+* Holds all channels
 * Holds threadsafe references to useful globals
 ** HTTP client for 429 handling
 ** API secrets from env
 ** Misc. config?
 * Pass `&ref` of container to node constructor, which then copies references of required components into self, trait for "has constructor accepting DI cont."
 
+Crate `enum_dispatch` perfect fit for node constructor trait
+
+* Create enum with variants matching structs that implement a trait
+* Annotate enum and trait
+* Each enum variant (which can be included in serde deserialize output) will have the functions defined in the trait, and will delegate to the correct variant statically
+
 === How to wire outputs to inputs?
 * Nodes have unique names
 * Create a broadcast channel for each output
-** Map-style structure, get channel by node name, output name(, in vs. out)
-** DI container owns map
-* Node construction copies output, moves input end (is this move possible?)
+* DI container owns all channels
+** Tokio broadcast channels are created by cloning/subscribing to the sender end, so container holds the sender sides
+** Receiver ends initally created by channel constructor could be dropped
+** DI container has separate methods for obtaining a sender or receiver channel
 * Channels are generic (enum by datatype)
 ** Constructor ``match``es each of its inputs to validate types
 ** Constructor returns Err if `match` fails
 
 === How to synchronize node starts? Is it necessary?
-* Channel implementation dependent
-** If messages only reach rx ends that are currently blocking, instantiation order matters; have to walk graph and wait for all children to begin blocking before starting parent
-** If message history is retained, nodes can be started in any order
-*** `tokio::sync::broadcast` looks promising:
-**** Messages in channel are retained until all Recievers have read
-**** If storing at least one Receiver in DI container, this means memory will "leak" as messages will never be dropped
-**** Once channel fills to capacity with unread messages, further messages will cause oldest to be dropped and Receivers will be given RecvError::Lagged
-**** However, as each channel will only have a single output message sent in its lifetime, this doesn't matter
-*** If this holds, node can begin blocking as soon as constructor is called
+* DI container holds "waker" broadcast channel `tokio::sync::broadcast::Sender<()>`
+* Node threads obtain a rx channel from container, and block until a unit message is transmitted
+* DI container has method that sends wakeup message to all holders of the rx channel
+
+Tokio broadcast receivers only get messages that were sent after they are created by calling `tx.subscribe()`
 
 == File handling
 [%hardbreaks]
 Node outputs should be immutable, no edit in place
 Duplicated files in memory not feasible
-Filetrees represented as nested `Directory` objects
-
-* `Directory` holds list of child `Directory` objects
-* `Directory` holds list of child `File` objects
-* `File` and `Directory` wrapped by same enum
-* ``File``/``Directory`` list has metadata in filetree level
-** permissions/ownership/binary vs text?/?
-* `File` holds hash string
+Filetrees represented as list of file paths mapped to content hashes, no nested structure
+File paths are represented as a list of each path component, with any trickery mangled by the FilePath struct's constructor
 
 Separate shared content addressible store holds files indexed by hash
 
@@ -88,6 +87,8 @@ File store can be abstract, with multiple backends for incremental development w
 * In-memory
 * DB
 * Filesystem
+
+Initial implementation will use an in-memory filestore
 
 == O11y/UI
 [%hardbreaks]
