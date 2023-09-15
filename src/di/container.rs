@@ -27,6 +27,7 @@ pub(crate) enum InputType {
     Path(broadcast::Sender<FilePath>),
     Files(broadcast::Sender<FileTree>),
     Regex(broadcast::Sender<Regex>),
+    List(broadcast::Sender<Vec<String>>),
 }
 
 impl InputType {
@@ -36,6 +37,7 @@ impl InputType {
             InputType::Path(c) => OutputType::Path(c.subscribe()),
             InputType::Files(c) => OutputType::Files(c.subscribe()),
             InputType::Regex(c) => OutputType::Regex(c.subscribe()),
+            InputType::List(c) => OutputType::List(c.subscribe()),
         }
     }
 }
@@ -46,6 +48,7 @@ pub(crate) enum OutputType {
     Path(broadcast::Receiver<FilePath>),
     Files(broadcast::Receiver<FileTree>),
     Regex(broadcast::Receiver<Regex>),
+    List(broadcast::Receiver<Vec<String>>),
 }
 
 /// Stores a channel ID by a tuple of (output node name, output name)

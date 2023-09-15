@@ -39,6 +39,7 @@ pub enum NodeConfigTypes {
 enum SourceValue {
     Text(String),
     Number(Number),
+    List(Vec<String>),
 }
 
 #[derive(Debug, Clone, Deserialize)]

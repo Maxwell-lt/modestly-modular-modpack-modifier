@@ -1,12 +1,16 @@
 use core::fmt;
+use std::hash::{Hash, Hasher};
 use std::{str::FromStr, path::Path};
+use glob_match::glob_match;
+use regex::RegexSet;
 use thiserror::Error;
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Eq)]
 pub(crate) struct FilePath {
     dirs: Vec<String>,
     name: String,
+    cached_path: String,
 }
 
 impl FilePath {
@@ -20,6 +24,11 @@ impl FilePath {
             .chain(std::iter::once(&self.name))
             .map(String::to_owned)
             .collect::<Vec<String>>()
+    }
+
+    pub(crate) fn glob_match(&self, patterns: &[&str]) -> bool {
+        patterns.iter()
+            .any(|pattern| glob_match(pattern, &self.cached_path))
     }
 }
 
@@ -43,6 +52,7 @@ impl FromStr for FilePath {
                 dirs: directories.iter()
                     .map(|s| s.to_string())
                     .collect::<Vec<String>>(),
+                cached_path: parts.join("/"),
             })
         } else {
             return Err(FilePathError::PathEmptyError(path.to_string()));
@@ -60,11 +70,20 @@ impl TryFrom<&Path> for FilePath {
 
 impl fmt::Display for FilePath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for dir in self.dirs.iter() {
-            write!(f, "{}/", dir)?;
-        }
-        write!(f, "{}", self.name)?;
+        write!(f, "{}", self.cached_path)?;
         Ok(())
+    }
+}
+
+impl PartialEq for FilePath {
+    fn eq(&self, other: &Self) -> bool {
+        self.cached_path == other.cached_path
+    }
+}
+
+impl Hash for FilePath {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+       self.cached_path.hash(state);
     }
 }
 
@@ -124,5 +143,13 @@ mod tests {
     fn reject_unix_absolute_path() {
         let result = FilePath::from_str("/etc/passwd");
         assert_eq!(result.unwrap_err(), FilePathError::AbsolutePathError("/etc/passwd".to_string()));
+    }
+
+    #[test]
+    fn matches_glob() {
+        let path = FilePath::from_str("test/path/containing/a/file.json").unwrap();
+        assert!(path.glob_match(&["test/**/*.json"]));
+        assert!(!path.glob_match(&["test/**/*.txt"]));
+        assert!(path.glob_match(&["test/**", "does/not/match/**"]));
     }
 }

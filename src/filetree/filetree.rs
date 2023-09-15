@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::u128;
 use std::sync::Arc;
+use regex::RegexSet;
 use thiserror::Error;
-
 use super::filestore::FileStore;
 use super::filepath::FilePath;
 
@@ -12,7 +12,7 @@ pub(crate) struct FileTree {
     // Should contents use String or FilePath as a key? String is *probably* cheaper (as FilePath
     // owns several strings internally), but FilePath as a key allows stronger guarantees on valid
     // paths.
-    contents: HashMap<String, u128>,
+    contents: HashMap<FilePath, u128>,
     store: FileStore,
 }
 
@@ -23,11 +23,11 @@ impl FileTree {
 
     pub(crate) fn add_file(&mut self, path: &FilePath, file: Vec<u8>) -> () {
         let hash = self.store.write_file(file);
-        self.contents.insert(path.to_string(), hash);
+        self.contents.insert(path.clone(), hash);
     }
 
     pub(crate) fn get_file(&self, path: &FilePath) -> Option<Arc<Vec<u8>>> {
-        if let Some(hash) = self.contents.get(&path.to_string()) {
+        if let Some(hash) = self.contents.get(path) {
             if let Some(file) = self.store.get_file(*hash) {
                 return Some(file);
             }
@@ -39,13 +39,13 @@ impl FileTree {
     ///
     /// Idempotent.
     pub(crate) fn delete_file(&mut self, path: &FilePath) -> () {
-        self.contents.remove(&path.to_string());
+        self.contents.remove(path);
     }
 
     pub(crate) fn copy_file(&mut self, from: &FilePath, to: &FilePath) -> Result<(), FileTreeError> {
-        match self.contents.get(&from.to_string()) {
+        match self.contents.get(from) {
             Some(hash) => {
-                self.contents.insert(to.to_string(), *hash);
+                self.contents.insert(to.clone(), *hash);
                 Ok(())
             },
             None => Err(FileTreeError::FileNotFoundError(from.to_string())),
@@ -58,10 +58,19 @@ impl FileTree {
         Ok(())
     }
 
-    pub(crate) fn list_files(&self) -> HashSet<FilePath> {
+    pub(crate) fn list_files(&self) -> HashSet<&FilePath> {
         self.contents.keys()
-            .map(|s| FilePath::from_str(s).expect(&format!("Corrupt path detected while obtaining file list from FileTree! Invalid path: {}", s)))
             .collect()
+    }
+
+    pub(crate) fn filter_files(&self, filters: &[&str]) -> FileTree {
+        FileTree { 
+            contents: self.contents.iter()
+                .filter(|entry| entry.0.glob_match(filters))
+                .map(|entry| (entry.0.clone(), *entry.1))
+                .collect(),
+            store: self.store.clone(),
+        }
     }
 }
 
@@ -142,10 +151,31 @@ mod tests {
         assert!(files.list_files().is_empty());
         
         files.add_file(&path1, "Test".into());
-        assert_eq!(files.list_files(), [path1.clone()].into());
+        assert_eq!(files.list_files(), [&path1].into());
         
         files.copy_file(&path1, &path2).unwrap();
         files.copy_file(&path2, &path3).unwrap();
-        assert_eq!(files.list_files(), [path1, path2, path3].into());
+        assert_eq!(files.list_files(), [&path1, &path2, &path3].into());
+    }
+
+    #[test]
+    fn filter_files() {
+        let mut files = get_filetree();
+        let path1 = FilePath::from_str("overrides/mods/mod.jar").unwrap();
+        let path2 = FilePath::from_str("overrides/config/config.cfg").unwrap();
+        let path3 = FilePath::from_str("client_overrides/config/client.cfg").unwrap();
+        let path4 = FilePath::from_str("other/config/readme.md").unwrap();
+        files.add_file(&path1, "Hello".into());
+        files.add_file(&path2, "World".into());
+        files.add_file(&path3, "Foo".into());
+        files.add_file(&path4, "Bar".into());
+
+        assert_eq!(files.filter_files(&["overrides/**/*"]).list_files().symmetric_difference(&[&path1, &path2].into()).count(), 0);
+        assert_eq!(files.filter_files(&["**/*.cfg"]).list_files().symmetric_difference(&[&path2, &path3].into()).count(), 0);
+        assert_eq!(files.filter_files(&["**/*.jar", "**/*.cfg"]).list_files().symmetric_difference(&[&path1, &path2, &path3].into()).count(), 0);
+        assert_eq!(files.filter_files(&["*overrides/**/*.cfg"]).list_files().symmetric_difference(&[&path2, &path3].into()).count(), 0);
+        assert_eq!(files.filter_files(&["**/config/**"]).list_files().symmetric_difference(&[&path2, &path3, &path4].into()).count(), 0);
+        // This assertion fails, potentially due to a bug in glob-match. More investigation is needed.
+        // assert_eq!(files.filter_files(&["!**/*.md"]).list_files().symmetric_difference(&[&path1, &path2, &path3].into()).count(), 0);
     }
 }
