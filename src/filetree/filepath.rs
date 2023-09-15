@@ -2,7 +2,6 @@ use core::fmt;
 use std::hash::{Hash, Hasher};
 use std::{str::FromStr, path::Path};
 use glob_match::glob_match;
-use regex::RegexSet;
 use thiserror::Error;
 
 
@@ -26,9 +25,9 @@ impl FilePath {
             .collect::<Vec<String>>()
     }
 
-    pub(crate) fn glob_match(&self, patterns: &[&str]) -> bool {
+    pub(crate) fn glob_match<T: AsRef<str>>(&self, patterns: &[T]) -> bool {
         patterns.iter()
-            .any(|pattern| glob_match(pattern, &self.cached_path))
+            .any(|pattern| glob_match(pattern.as_ref(), &self.cached_path))
     }
 }
 

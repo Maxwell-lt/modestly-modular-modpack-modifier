@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 use std::u128;
 use std::sync::Arc;
-use regex::RegexSet;
 use thiserror::Error;
 use super::filestore::FileStore;
 use super::filepath::FilePath;
@@ -63,7 +61,7 @@ impl FileTree {
             .collect()
     }
 
-    pub(crate) fn filter_files(&self, filters: &[&str]) -> FileTree {
+    pub(crate) fn filter_files<T: AsRef<str>>(&self, filters: &[T]) -> FileTree {
         FileTree { 
             contents: self.contents.iter()
                 .filter(|entry| entry.0.glob_match(filters))
