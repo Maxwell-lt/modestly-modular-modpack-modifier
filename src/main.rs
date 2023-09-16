@@ -8,19 +8,16 @@ use options::Options;
 use crate::operators::model::{CalculatedOperator, OperatorConfig};
 use crate::operators::operators::*;
 
-mod operators;
-mod options;
+mod di;
 mod filetree;
 mod node;
-mod di;
+mod operators;
+mod options;
 
 fn main() -> Result<()> {
     let opt: Options = options::parse();
     let config_map: HashMap<String, OperatorConfig> = serde_yaml::from_reader::<File, Operators>(
-        File::open(&opt.config_file).context(format!(
-            "Failed to open config file {}",
-            opt.config_file.to_string_lossy()
-        ))?,
+        File::open(&opt.config_file).context(format!("Failed to open config file {}", opt.config_file.to_string_lossy()))?,
     )
     .context("Failed to parse YAML")?
     .operators
@@ -37,61 +34,39 @@ fn main() -> Result<()> {
         println!("Executing step: {:?}", config);
         match config {
             OperatorConfig::URI { name, value } => {
-                calculated_operators.insert(
-                    name.to_owned(),
-                    CalculatedOperator::Str(Box::new(URILiteral::new(value))),
-                );
-            }
+                calculated_operators.insert(name.to_owned(), CalculatedOperator::Str(Box::new(URILiteral::new(value))));
+            },
             OperatorConfig::Path { name, value } => {
-                calculated_operators.insert(
-                    name.to_owned(),
-                    CalculatedOperator::Path(Box::new(PathLiteral::new(value))),
-                );
-            }
+                calculated_operators.insert(name.to_owned(), CalculatedOperator::Path(Box::new(PathLiteral::new(value))));
+            },
             OperatorConfig::Regex { name, value } => {
-                calculated_operators.insert(
-                    name.to_owned(),
-                    CalculatedOperator::Regex(Box::new(RegexLiteral::new(value)?)),
-                );
-            }
+                calculated_operators.insert(name.to_owned(), CalculatedOperator::Regex(Box::new(RegexLiteral::new(value)?)));
+            },
             OperatorConfig::ArchiveDownloader { name, uri } => {
-                let uri_operator = calculated_operators.get(uri).context(format!(
-                    "Operator {} not calculated yet, but operator {} depends on it!",
-                    uri, name
-                ))?;
+                let uri_operator = calculated_operators
+                    .get(uri)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", uri, name))?;
                 if let CalculatedOperator::Str(uri) = uri_operator {
                     calculated_operators.insert(
                         name.to_owned(),
-                        CalculatedOperator::Folder(Box::new(ArchiveDownloader::new(
-                            &uri.output()?,
-                        )?)),
+                        CalculatedOperator::Folder(Box::new(ArchiveDownloader::new(&uri.output()?)?)),
                     );
                 } else {
                     bail!(format!("Operator {} expected to be type URI!", uri));
                 }
-            }
-            OperatorConfig::ArchiveFilter {
-                name,
-                archive,
-                path_regex,
-            } => {
-                let archive_operator = calculated_operators.get(archive).context(format!(
-                    "Operator {} not calculated yet, but operator {} depends on it!",
-                    archive, name
-                ))?;
+            },
+            OperatorConfig::ArchiveFilter { name, archive, path_regex } => {
+                let archive_operator = calculated_operators
+                    .get(archive)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", archive, name))?;
                 let path_regex_operator = calculated_operators.get(path_regex).context(format!(
                     "Operator {} not calculated yet, but operator {} depends on it!",
                     path_regex, name
                 ))?;
-                if let (CalculatedOperator::Folder(path), CalculatedOperator::Regex(regex)) =
-                    (archive_operator, path_regex_operator)
-                {
+                if let (CalculatedOperator::Folder(path), CalculatedOperator::Regex(regex)) = (archive_operator, path_regex_operator) {
                     calculated_operators.insert(
                         name.to_owned(),
-                        CalculatedOperator::Folder(Box::new(ArchiveFilter::new(
-                            regex.output()?,
-                            path.output()?,
-                        )?)),
+                        CalculatedOperator::Folder(Box::new(ArchiveFilter::new(regex.output()?, path.output()?)?)),
                     );
                 } else {
                     bail!(format!(
@@ -99,30 +74,19 @@ fn main() -> Result<()> {
                         archive, path_regex
                     ));
                 }
-            }
-            OperatorConfig::FileWriter {
-                name,
-                archive,
-                destination,
-            } => {
-                let archive_operator = calculated_operators.get(archive).context(format!(
+            },
+            OperatorConfig::FileWriter { name, archive, destination } => {
+                let archive_operator = calculated_operators
+                    .get(archive)
+                    .context(format!("Operator {} not calculated yet, but operator {} depends on it!", archive, name))?;
+                let destination_operator = calculated_operators.get(destination).context(format!(
                     "Operator {} not calculated yet, but operator {} depends on it!",
-                    archive, name
+                    destination, name
                 ))?;
-                let destination_operator =
-                    calculated_operators.get(destination).context(format!(
-                        "Operator {} not calculated yet, but operator {} depends on it!",
-                        destination, name
-                    ))?;
-                if let (CalculatedOperator::Folder(src), CalculatedOperator::Path(dest)) =
-                    (archive_operator, destination_operator)
-                {
+                if let (CalculatedOperator::Folder(src), CalculatedOperator::Path(dest)) = (archive_operator, destination_operator) {
                     calculated_operators.insert(
                         name.to_owned(),
-                        CalculatedOperator::Terminal(Box::new(FileWriter::new(
-                            src.output()?,
-                            &dest.output()?,
-                        )?)),
+                        CalculatedOperator::Terminal(Box::new(FileWriter::new(src.output()?, &dest.output()?)?)),
                     );
                 } else {
                     bail!(format!(
@@ -130,10 +94,10 @@ fn main() -> Result<()> {
                         archive, destination
                     ));
                 }
-            }
+            },
             _ => {
                 bail!("Hit unimplemented operator!");
-            }
+            },
         };
     }
 
@@ -150,10 +114,10 @@ fn create_adjacency_matrix(map: &BTreeMap<String, Vec<String>>) -> Result<Vec<Ve
     let indices: Vec<&String> = map.keys().collect();
     for (i, edges) in map.values().enumerate() {
         for edge in edges {
-            matrix[i][indices
-                .binary_search(&edge).ok()
-                .context(format!("Failed to build adjacency matrix, node with name {} referenced by {} does not exist", edge, indices[i]))?
-            ] = true;
+            matrix[i][indices.binary_search(&edge).ok().context(format!(
+                "Failed to build adjacency matrix, node with name {} referenced by {} does not exist",
+                edge, indices[i]
+            ))?] = true;
         }
     }
 
@@ -162,10 +126,7 @@ fn create_adjacency_matrix(map: &BTreeMap<String, Vec<String>>) -> Result<Vec<Ve
 
 fn topological_sort(config_map: &HashMap<String, OperatorConfig>) -> Result<Vec<String>> {
     // Build graph representations
-    let adjacency_list: BTreeMap<String, Vec<String>> = config_map
-        .iter()
-        .map(|(k, v)| (k.to_owned(), v.get_refs()))
-        .collect();
+    let adjacency_list: BTreeMap<String, Vec<String>> = config_map.iter().map(|(k, v)| (k.to_owned(), v.get_refs())).collect();
     let mut matrix = create_adjacency_matrix(&adjacency_list)?;
 
     // Find operators with no dependencies (indegree 0)
@@ -184,9 +145,7 @@ fn topological_sort(config_map: &HashMap<String, OperatorConfig>) -> Result<Vec<
     loop {
         if let Some(node) = s.pop_front() {
             nodes_in_order.push(node.to_owned());
-            let col = indices
-                .binary_search(&&node)
-                .expect("Name not found in adjacency list!");
+            let col = indices.binary_search(&&node).expect("Name not found in adjacency list!");
             for row in 0..operator_count {
                 if matrix[row][col] {
                     let m = indices[row];

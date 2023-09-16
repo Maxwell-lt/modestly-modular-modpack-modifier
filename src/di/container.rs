@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use anyhow::Result;
 use regex::Regex;
-use tokio::sync::broadcast;
 use serde::Deserialize;
+use std::collections::HashMap;
+use tokio::sync::broadcast;
 
-use crate::filetree::{filepath::FilePath, filetree::FileTree, filestore::FileStore};
+use crate::filetree::{filepath::FilePath, filestore::FileStore, filetree::FileTree};
 
 pub(crate) struct DiContainer {
     // Global config values (e.g. API keys)
@@ -16,7 +16,7 @@ pub(crate) struct DiContainer {
     // Triggers all nodes to begin waiting for inputs
     // On node init, not all [`broadcast::Receiver`] instances may exist yet,
     // so messages sent from the paired [`broadcast::Sender`]
-    // by nodes that take no inputs would not be sent to nodes yet to 
+    // by nodes that take no inputs would not be sent to nodes yet to
     // be initialized if it began processing post-init.
     waker: broadcast::Sender<()>,
 }
@@ -57,7 +57,12 @@ pub struct ChannelId(pub String, pub String);
 
 impl DiContainer {
     pub(crate) fn new(configs: HashMap<String, String>, channels: HashMap<ChannelId, InputType>) -> Self {
-        Self { configs, channels, filestore: FileStore::new(), waker: broadcast::channel::<()>(1).0 }
+        Self {
+            configs,
+            channels,
+            filestore: FileStore::new(),
+            waker: broadcast::channel::<()>(1).0,
+        }
     }
 
     pub(crate) fn get_filestore(&self) -> FileStore {
@@ -103,7 +108,7 @@ mod tests {
     #[test]
     fn get_config() {
         let c = DiContainer::new(HashMap::from([("curse.api-key".into(), "12345678".into())]), HashMap::new());
-        
+
         assert_eq!(c.get_config("curse.api-key").unwrap(), "12345678");
     }
 
@@ -111,9 +116,7 @@ mod tests {
     fn get_sender() {
         let (tx, mut rx) = broadcast::channel::<String>(1);
         let channel_id = ChannelId("node1".into(), "outputA".into());
-        let c = DiContainer::new(HashMap::new(), HashMap::from([
-                                                               (channel_id.clone(), InputType::Text(tx))
-        ]));
+        let c = DiContainer::new(HashMap::new(), HashMap::from([(channel_id.clone(), InputType::Text(tx))]));
 
         let container_tx = match c.get_sender(&channel_id).unwrap() {
             InputType::Text(channel) => channel,
@@ -128,16 +131,14 @@ mod tests {
     fn get_receiver() {
         let tx = broadcast::channel::<String>(1).0;
         let channel_id = ChannelId("node1".into(), "outputA".into());
-        let c = DiContainer::new(HashMap::new(), HashMap::from([
-                                                               (channel_id.clone(), InputType::Text(tx.clone()))
-        ]));
+        let c = DiContainer::new(HashMap::new(), HashMap::from([(channel_id.clone(), InputType::Text(tx.clone()))]));
 
         let mut container_rx = match c.get_receiver(&channel_id).unwrap() {
             OutputType::Text(channel) => channel,
             _ => unreachable!(),
         };
         tx.send("Test".into()).unwrap();
-        
+
         assert_eq!(container_rx.try_recv().unwrap(), "Test");
     }
 

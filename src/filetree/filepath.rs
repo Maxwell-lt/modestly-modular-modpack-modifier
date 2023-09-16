@@ -1,9 +1,8 @@
 use core::fmt;
-use std::hash::{Hash, Hasher};
-use std::{str::FromStr, path::Path};
 use glob_match::glob_match;
+use std::hash::{Hash, Hasher};
+use std::{path::Path, str::FromStr};
 use thiserror::Error;
-
 
 #[derive(Debug, Clone, Eq)]
 pub(crate) struct FilePath {
@@ -26,14 +25,13 @@ impl FilePath {
     }
 
     pub(crate) fn glob_match<T: AsRef<str>>(&self, patterns: &[T]) -> bool {
-        patterns.iter()
-            .any(|pattern| glob_match(pattern.as_ref(), &self.cached_path))
+        patterns.iter().any(|pattern| glob_match(pattern.as_ref(), &self.cached_path))
     }
 }
 
 impl FromStr for FilePath {
     type Err = FilePathError;
-    
+
     fn from_str(path: &str) -> Result<Self, Self::Err> {
         if path.chars().last() == Some('/') {
             return Err(FilePathError::DirectoryError(path.to_string()));
@@ -41,16 +39,11 @@ impl FromStr for FilePath {
         if path.chars().nth(0) == Some('/') {
             return Err(FilePathError::AbsolutePathError(path.to_string()));
         }
-        let parts: Vec<&str> = path
-            .split("/")
-            .filter(|s| !s.is_empty())
-            .collect();
+        let parts: Vec<&str> = path.split("/").filter(|s| !s.is_empty()).collect();
         if let Some((filename, directories)) = parts.split_last() {
             Ok(FilePath {
                 name: filename.to_string(),
-                dirs: directories.iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<String>>(),
+                dirs: directories.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
                 cached_path: parts.join("/"),
             })
         } else {
@@ -82,7 +75,7 @@ impl PartialEq for FilePath {
 
 impl Hash for FilePath {
     fn hash<H: Hasher>(&self, state: &mut H) {
-       self.cached_path.hash(state);
+        self.cached_path.hash(state);
     }
 }
 

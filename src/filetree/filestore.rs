@@ -1,7 +1,7 @@
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use xxhash_rust::xxh3::xxh3_128;
-use parking_lot::RwLock;
 
 /// Content-addressed store of byte arrays (files).
 #[derive(Debug, Clone)]
@@ -12,7 +12,7 @@ pub(crate) struct FileStore {
 impl FileStore {
     pub(crate) fn new() -> FileStore {
         FileStore {
-            data: Arc::new(RwLock::new(HashMap::new()))
+            data: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -38,15 +38,12 @@ impl FileStore {
     ///
     /// The returned array preserves the order of provided hash list.
     ///
-    /// Returns [`None`] if any of the hashes are not found in the store. 
+    /// Returns [`None`] if any of the hashes are not found in the store.
     ///
     /// Locks the internal store for reading.
     pub(crate) fn get_all_files(&self, hashes: Vec<u128>) -> Option<Vec<Arc<Vec<u8>>>> {
         let map = self.data.read();
-        hashes
-            .iter()
-            .map(|hash| map.get(hash).map(|a| a.clone()))
-            .collect()
+        hashes.iter().map(|hash| map.get(hash).map(|a| a.clone())).collect()
     }
 
     /// Store set of files and get a hash for each.
@@ -79,7 +76,7 @@ mod tests {
 
         let hash = store.write_file(file.clone());
         let retrieved_file: Arc<Vec<u8>> = store.get_file(hash).unwrap();
-        
+
         assert_eq!(*retrieved_file, file);
     }
 
@@ -89,10 +86,10 @@ mod tests {
         let file_1 = "Hello World!\n".to_string().into_bytes();
         let file_2 = "Multiline\nFile!\n".to_string().into_bytes();
         let file_3: Vec<u8> = vec![0, 40, 90, 255, 3, 52, 44, 128, 3];
-        
+
         let hashes = store.write_all_files(vec![file_1.clone(), file_2.clone(), file_3.clone()]);
         let retrieved_files = store.get_all_files(hashes).unwrap();
-        
+
         assert_eq!(*retrieved_files[0], file_1);
         assert_eq!(*retrieved_files[1], file_2);
         assert_eq!(*retrieved_files[2], file_3);

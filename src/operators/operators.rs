@@ -22,9 +22,7 @@ pub struct URILiteral {
 
 impl URILiteral {
     pub fn new(value: &str) -> URILiteral {
-        URILiteral {
-            value: value.to_owned(),
-        }
+        URILiteral { value: value.to_owned() }
     }
 }
 
@@ -40,9 +38,7 @@ pub struct PathLiteral {
 
 impl PathLiteral {
     pub fn new(value: &str) -> PathLiteral {
-        PathLiteral {
-            value: PathBuf::from(value),
-        }
+        PathLiteral { value: PathBuf::from(value) }
     }
 }
 
@@ -58,9 +54,7 @@ pub struct RegexLiteral {
 
 impl RegexLiteral {
     pub fn new(value: &str) -> Result<RegexLiteral> {
-        Ok(RegexLiteral {
-            value: Regex::new(value)?,
-        })
+        Ok(RegexLiteral { value: Regex::new(value)? })
     }
 }
 
@@ -127,9 +121,7 @@ pub struct FileWriter {}
 impl FileWriter {
     /// Copies all files from the input directory to the destination directory.
     pub fn new(dir: TempDir, destination: &Path) -> Result<FileWriter> {
-        CopyBuilder::new(dir.path(), destination)
-            .overwrite(true)
-            .run()?;
+        CopyBuilder::new(dir.path(), destination).overwrite(true).run()?;
         Ok(FileWriter {})
     }
 }

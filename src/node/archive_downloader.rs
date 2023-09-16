@@ -1,7 +1,14 @@
 use super::config::{NodeConfig, NodeInitError};
+use crate::{
+    di::container::{ChannelId, DiContainer, InputType, OutputType},
+    filetree::{filepath::FilePath, filetree::FileTree},
+};
 use serde::Deserialize;
-use crate::{di::container::{DiContainer, ChannelId, OutputType, InputType}, filetree::{filetree::FileTree, filepath::FilePath}};
-use std::{collections::HashMap, thread::{JoinHandle, spawn}, io::Read};
+use std::{
+    collections::HashMap,
+    io::Read,
+    thread::{spawn, JoinHandle},
+};
 use zip::read::ZipArchive;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -20,7 +27,12 @@ impl NodeConfig for ArchiveDownloaderNode {
             let in_id = input_ids.get("url").ok_or(NodeInitError::MissingInputId("url".into()))?;
             match ctx.get_receiver(&in_id).ok_or_else(|| NodeInitError::MissingChannel(in_id.clone()))? {
                 OutputType::Text(channel) => channel,
-                _ => return Err(NodeInitError::InvalidInputType { input: "url".into(), channel: in_id.clone() }),
+                _ => {
+                    return Err(NodeInitError::InvalidInputType {
+                        input: "url".into(),
+                        channel: in_id.clone(),
+                    })
+                },
             }
         };
         let fs = ctx.get_filestore();
@@ -51,10 +63,16 @@ impl NodeConfig for ArchiveDownloaderNode {
 }
 
 #[cfg(test)]
-mod test {
-    use crate::{filetree::{filetree::FileTree, filepath::FilePath}, di::container::{ChannelId, InputType}};
-    use std::{time::{Duration, Instant}, str::FromStr};
+mod tests {
+    use crate::{
+        di::container::{ChannelId, InputType},
+        filetree::{filepath::FilePath, filetree::FileTree},
+    };
     use std::thread::sleep;
+    use std::{
+        str::FromStr,
+        time::{Duration, Instant},
+    };
 
     use super::*;
 
@@ -65,15 +83,19 @@ mod test {
         let url_channel = tokio::sync::broadcast::channel::<String>(1).0;
         let (output_channel, mut output_rx) = tokio::sync::broadcast::channel::<FileTree>(1);
         let node_id = "archive_downloader_test";
-        let input_ids = HashMap::from([
-                                      ("url".to_string(), ChannelId("test_node".to_string(), "test_output".to_string())),
-        ]);
+        let input_ids = HashMap::from([("url".to_string(), ChannelId("test_node".to_string(), "test_output".to_string()))]);
         let container_channels = HashMap::from([
-                                               (ChannelId("test_node".to_string(), "test_output".to_string()), InputType::Text(url_channel.clone())),
-                                               (ChannelId("archive_downloader_test".to_string(), "default".to_string()), InputType::Files(output_channel.clone())),
+            (
+                ChannelId("test_node".to_string(), "test_output".to_string()),
+                InputType::Text(url_channel.clone()),
+            ),
+            (
+                ChannelId("archive_downloader_test".to_string(), "default".to_string()),
+                InputType::Files(output_channel.clone()),
+            ),
         ]);
         let ctx = DiContainer::new(HashMap::new(), container_channels);
-        let handle = ArchiveDownloaderNode{ }.validate_and_spawn(node_id, input_ids, &ctx).unwrap();
+        let handle = ArchiveDownloaderNode {}.validate_and_spawn(node_id, input_ids, &ctx).unwrap();
 
         // Wake nodes and simulate dependency node(s)
         url_channel.send(url.to_string()).unwrap();

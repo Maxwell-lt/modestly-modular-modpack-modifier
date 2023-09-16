@@ -10,41 +10,15 @@ use super::operators::Operator;
 #[serde(tag = "kind")]
 pub enum OperatorConfig {
     // Literals
-    URI {
-        name: String,
-        value: String,
-    },
-    Path {
-        name: String,
-        value: String,
-    },
-    Number {
-        name: String,
-        value: i64,
-    },
-    Text {
-        name: String,
-        value: String,
-    },
-    Regex {
-        name: String,
-        value: String,
-    },
+    URI { name: String, value: String },
+    Path { name: String, value: String },
+    Number { name: String, value: i64 },
+    Text { name: String, value: String },
+    Regex { name: String, value: String },
     // Operators
-    ArchiveDownloader {
-        name: String,
-        uri: String,
-    },
-    ArchiveFilter {
-        name: String,
-        archive: String,
-        path_regex: String,
-    },
-    FileWriter {
-        name: String,
-        archive: String,
-        destination: String,
-    },
+    ArchiveDownloader { name: String, uri: String },
+    ArchiveFilter { name: String, archive: String, path_regex: String },
+    FileWriter { name: String, archive: String, destination: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -74,16 +48,8 @@ impl OperatorConfig {
             Self::Text { .. } => Vec::new(),
             Self::Regex { .. } => Vec::new(),
             Self::ArchiveDownloader { uri, .. } => vec![uri.to_owned()],
-            Self::ArchiveFilter {
-                archive,
-                path_regex,
-                ..
-            } => vec![archive.to_owned(), path_regex.to_owned()],
-            Self::FileWriter {
-                archive,
-                destination,
-                ..
-            } => vec![archive.to_owned(), destination.to_owned()],
+            Self::ArchiveFilter { archive, path_regex, .. } => vec![archive.to_owned(), path_regex.to_owned()],
+            Self::FileWriter { archive, destination, .. } => vec![archive.to_owned(), destination.to_owned()],
         }
     }
 }

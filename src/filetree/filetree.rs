@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use std::u128;
-use std::sync::Arc;
-use thiserror::Error;
-use super::filestore::FileStore;
 use super::filepath::FilePath;
+use super::filestore::FileStore;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::u128;
+use thiserror::Error;
 
 #[derive(Clone, Debug)]
 pub(crate) struct FileTree {
@@ -16,7 +16,10 @@ pub(crate) struct FileTree {
 
 impl FileTree {
     pub(crate) fn new(store: FileStore) -> FileTree {
-        FileTree { contents: HashMap::new(), store }
+        FileTree {
+            contents: HashMap::new(),
+            store,
+        }
     }
 
     pub(crate) fn add_file(&mut self, path: &FilePath, file: Vec<u8>) -> () {
@@ -57,13 +60,14 @@ impl FileTree {
     }
 
     pub(crate) fn list_files(&self) -> HashSet<&FilePath> {
-        self.contents.keys()
-            .collect()
+        self.contents.keys().collect()
     }
 
     pub(crate) fn filter_files<T: AsRef<str>>(&self, filters: &[T]) -> FileTree {
-        FileTree { 
-            contents: self.contents.iter()
+        FileTree {
+            contents: self
+                .contents
+                .iter()
                 .filter(|entry| entry.0.glob_match(filters))
                 .map(|entry| (entry.0.clone(), *entry.1))
                 .collect(),
@@ -94,7 +98,7 @@ mod tests {
         let path = FilePath::from_str("directory/file.txt").unwrap();
         let contents = "Hello World!";
         files.add_file(&path, contents.into());
-        
+
         assert_eq!(String::from_utf8(files.get_file(&path).unwrap().to_vec()).unwrap(), contents.to_string())
     }
 
@@ -103,7 +107,7 @@ mod tests {
         let mut files = get_filetree();
         let path = FilePath::from_str("directory/file.txt").unwrap();
         files.add_file(&path, "Hello World!".into());
-        
+
         files.delete_file(&path);
         assert_eq!(files.get_file(&path), None);
     }
@@ -114,7 +118,7 @@ mod tests {
         let path = FilePath::from_str("directory/file.txt").unwrap();
         let path2 = FilePath::from_str("directory_two/file_two.txt").unwrap();
         files.add_file(&path, "Hello World!".into());
-        
+
         files.copy_file(&path, &path2).unwrap();
         assert_eq!(files.get_file(&path).unwrap(), files.get_file(&path2).unwrap());
     }
@@ -122,9 +126,15 @@ mod tests {
     #[test]
     fn copy_file_error_on_missing_source() {
         let mut files = get_filetree();
-        let result = files.copy_file(&FilePath::from_str("path/does/not/exist.txt").unwrap(), &FilePath::from_str("destination/path.txt").unwrap());
+        let result = files.copy_file(
+            &FilePath::from_str("path/does/not/exist.txt").unwrap(),
+            &FilePath::from_str("destination/path.txt").unwrap(),
+        );
 
-        assert_eq!(result.unwrap_err(), FileTreeError::FileNotFoundError("path/does/not/exist.txt".to_string()));
+        assert_eq!(
+            result.unwrap_err(),
+            FileTreeError::FileNotFoundError("path/does/not/exist.txt".to_string())
+        );
     }
 
     #[test]
@@ -147,10 +157,10 @@ mod tests {
         let path2 = FilePath::from_str("directory/file2.txt").unwrap();
         let path3 = FilePath::from_str("directory/file3.txt").unwrap();
         assert!(files.list_files().is_empty());
-        
+
         files.add_file(&path1, "Test".into());
         assert_eq!(files.list_files(), [&path1].into());
-        
+
         files.copy_file(&path1, &path2).unwrap();
         files.copy_file(&path2, &path3).unwrap();
         assert_eq!(files.list_files(), [&path1, &path2, &path3].into());
@@ -168,11 +178,46 @@ mod tests {
         files.add_file(&path3, "Foo".into());
         files.add_file(&path4, "Bar".into());
 
-        assert_eq!(files.filter_files(&["overrides/**/*"]).list_files().symmetric_difference(&[&path1, &path2].into()).count(), 0);
-        assert_eq!(files.filter_files(&["**/*.cfg"]).list_files().symmetric_difference(&[&path2, &path3].into()).count(), 0);
-        assert_eq!(files.filter_files(&["**/*.jar", "**/*.cfg"]).list_files().symmetric_difference(&[&path1, &path2, &path3].into()).count(), 0);
-        assert_eq!(files.filter_files(&["*overrides/**/*.cfg"]).list_files().symmetric_difference(&[&path2, &path3].into()).count(), 0);
-        assert_eq!(files.filter_files(&["**/config/**"]).list_files().symmetric_difference(&[&path2, &path3, &path4].into()).count(), 0);
+        assert_eq!(
+            files
+                .filter_files(&["overrides/**/*"])
+                .list_files()
+                .symmetric_difference(&[&path1, &path2].into())
+                .count(),
+            0
+        );
+        assert_eq!(
+            files
+                .filter_files(&["**/*.cfg"])
+                .list_files()
+                .symmetric_difference(&[&path2, &path3].into())
+                .count(),
+            0
+        );
+        assert_eq!(
+            files
+                .filter_files(&["**/*.jar", "**/*.cfg"])
+                .list_files()
+                .symmetric_difference(&[&path1, &path2, &path3].into())
+                .count(),
+            0
+        );
+        assert_eq!(
+            files
+                .filter_files(&["*overrides/**/*.cfg"])
+                .list_files()
+                .symmetric_difference(&[&path2, &path3].into())
+                .count(),
+            0
+        );
+        assert_eq!(
+            files
+                .filter_files(&["**/config/**"])
+                .list_files()
+                .symmetric_difference(&[&path2, &path3, &path4].into())
+                .count(),
+            0
+        );
         // This assertion fails, potentially due to a bug in glob-match. More investigation is needed.
         // assert_eq!(files.filter_files(&["!**/*.md"]).list_files().symmetric_difference(&[&path1, &path2, &path3].into()).count(), 0);
     }
