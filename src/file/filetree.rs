@@ -22,7 +22,7 @@ impl FileTree {
         }
     }
 
-    pub(crate) fn add_file(&mut self, path: &FilePath, file: Vec<u8>) -> () {
+    pub(crate) fn add_file(&mut self, path: &FilePath, file: Vec<u8>) {
         let hash = self.store.write_file(file);
         self.contents.insert(path.clone(), hash);
     }
@@ -33,13 +33,13 @@ impl FileTree {
                 return Some(file);
             }
         }
-        return None;
+        None
     }
 
     /// Delete a filepath from the filetree.
     ///
     /// Idempotent.
-    pub(crate) fn delete_file(&mut self, path: &FilePath) -> () {
+    pub(crate) fn delete_file(&mut self, path: &FilePath) {
         self.contents.remove(path);
     }
 

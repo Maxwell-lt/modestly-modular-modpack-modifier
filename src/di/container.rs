@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 
-use crate::filetree::{filepath::FilePath, filestore::FileStore, filetree::FileTree};
+use crate::file::{filepath::FilePath, filestore::FileStore, filetree::FileTree};
 
 pub(crate) struct DiContainer {
     // Global config values (e.g. API keys)

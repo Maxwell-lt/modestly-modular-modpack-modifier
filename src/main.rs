@@ -9,7 +9,7 @@ use crate::operators::model::{CalculatedOperator, OperatorConfig};
 use crate::operators::operators::*;
 
 mod di;
-mod filetree;
+mod file;
 mod node;
 mod operators;
 mod options;

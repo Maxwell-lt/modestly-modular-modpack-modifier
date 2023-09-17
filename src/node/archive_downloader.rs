@@ -2,7 +2,7 @@ use super::config::{NodeConfig, NodeInitError};
 use super::utils;
 use crate::{
     di::container::{ChannelId, DiContainer, InputType, OutputType},
-    filetree::{filepath::FilePath, filetree::FileTree},
+    file::{filepath::FilePath, filetree::FileTree},
 };
 use serde::Deserialize;
 use std::{
@@ -52,7 +52,7 @@ impl NodeConfig for ArchiveDownloaderNode {
 mod tests {
     use crate::{
         di::container::{ChannelId, InputType},
-        filetree::{filepath::FilePath, filetree::FileTree},
+        file::{filepath::FilePath, filetree::FileTree},
     };
     use std::thread::sleep;
     use std::{

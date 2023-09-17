@@ -21,7 +21,7 @@ impl FileStore {
     /// Locks the internal store for reading.
     pub(crate) fn get_file(&self, hash: u128) -> Option<Arc<Vec<u8>>> {
         let map = self.data.read();
-        map.get(&hash).map(|a| a.clone())
+        map.get(&hash).cloned()
     }
 
     /// Insert file into the store and get its hash.
@@ -43,7 +43,7 @@ impl FileStore {
     /// Locks the internal store for reading.
     pub(crate) fn get_all_files(&self, hashes: Vec<u128>) -> Option<Vec<Arc<Vec<u8>>>> {
         let map = self.data.read();
-        hashes.iter().map(|hash| map.get(hash).map(|a| a.clone())).collect()
+        hashes.iter().map(|hash| map.get(hash).cloned()).collect()
     }
 
     /// Store set of files and get a hash for each.
