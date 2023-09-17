@@ -1,4 +1,5 @@
 use super::config::{NodeConfig, NodeInitError};
+use super::utils;
 use crate::{
     di::container::{ChannelId, DiContainer, InputType, OutputType},
     filetree::{filepath::FilePath, filetree::FileTree},
@@ -14,27 +15,12 @@ use zip::read::ZipArchive;
 #[derive(Debug, Clone, Deserialize)]
 pub struct ArchiveDownloaderNode;
 
+const URL: &str = "url";
+
 impl NodeConfig for ArchiveDownloaderNode {
     fn validate_and_spawn(&self, node_id: &str, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
-        let out_channel = {
-            let out_id = ChannelId(node_id.into(), "default".into());
-            match ctx.get_sender(&out_id).ok_or(NodeInitError::MissingChannel(out_id.clone()))? {
-                InputType::Files(channel) => channel,
-                _ => return Err(NodeInitError::InvalidOutputType(out_id)),
-            }
-        };
-        let mut in_channel = {
-            let in_id = input_ids.get("url").ok_or(NodeInitError::MissingInputId("url".into()))?;
-            match ctx.get_receiver(&in_id).ok_or_else(|| NodeInitError::MissingChannel(in_id.clone()))? {
-                OutputType::Text(channel) => channel,
-                _ => {
-                    return Err(NodeInitError::InvalidInputType {
-                        input: "url".into(),
-                        channel: in_id.clone(),
-                    })
-                },
-            }
-        };
+        let out_channel = utils::get_output!(ChannelId(node_id.into(), "default".into()), Files, ctx);
+        let mut in_channel = utils::get_input!(URL, Text, ctx, input_ids);
         let fs = ctx.get_filestore();
         let mut waker = ctx.get_waker();
         Ok(spawn(move || {

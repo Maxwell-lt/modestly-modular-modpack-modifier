@@ -7,43 +7,19 @@ use crate::di::container::{ChannelId, DiContainer, InputType, OutputType};
 use serde::Deserialize;
 
 use super::config::{NodeConfig, NodeInitError};
+use super::utils;
 
 #[derive(Debug, Clone, Deserialize)]
 struct FileFilterNode;
 
+const FILES: &str = "files";
+const PATTERN: &str = "pattern";
+
 impl NodeConfig for FileFilterNode {
     fn validate_and_spawn(&self, node_id: &str, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
-        let out_channel = {
-            let out_id = ChannelId(node_id.into(), "default".into());
-            match ctx.get_sender(&out_id).ok_or(NodeInitError::MissingChannel(out_id.clone()))? {
-                InputType::Files(channel) => channel,
-                _ => return Err(NodeInitError::InvalidOutputType(out_id)),
-            }
-        };
-        let mut file_input_channel = {
-            let in_id = input_ids.get("files").ok_or(NodeInitError::MissingInputId("files".into()))?;
-            match ctx.get_receiver(&in_id).ok_or_else(|| NodeInitError::MissingChannel(in_id.clone()))? {
-                OutputType::Files(channel) => channel,
-                _ => {
-                    return Err(NodeInitError::InvalidInputType {
-                        input: "files".into(),
-                        channel: in_id.clone(),
-                    })
-                },
-            }
-        };
-        let mut pattern_input_channel = {
-            let in_id = input_ids.get("pattern").ok_or(NodeInitError::MissingInputId("pattern".into()))?;
-            match ctx.get_receiver(&in_id).ok_or_else(|| NodeInitError::MissingChannel(in_id.clone()))? {
-                OutputType::List(channel) => channel,
-                _ => {
-                    return Err(NodeInitError::InvalidInputType {
-                        input: "pattern".into(),
-                        channel: in_id.clone(),
-                    })
-                },
-            }
-        };
+        let out_channel = utils::get_output!(ChannelId(node_id.into(), "default".into()), Files, ctx);
+        let mut file_input_channel = utils::get_input!(FILES, Files, ctx, input_ids);
+        let mut pattern_input_channel = utils::get_input!(PATTERN, List, ctx, input_ids);
         let mut waker = ctx.get_waker();
         Ok(spawn(move || {
             waker.blocking_recv().unwrap();
