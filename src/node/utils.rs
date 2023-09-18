@@ -50,3 +50,29 @@ where
         },
     }
 }
+
+#[cfg(test)]
+mod test_only {
+    use std::thread::sleep;
+    use std::time::{Duration, Instant};
+
+    use tokio::sync::broadcast::Receiver;
+    pub fn read_channel<T: Clone>(channel: &mut Receiver<T>, timeout: Duration) -> Result<T, &str> {
+        let start = Instant::now();
+        let interval = Duration::from_millis(50);
+        loop {
+            match channel.try_recv() {
+                Ok(res) => break Ok(res),
+                Err(..) => (),
+            }
+
+            sleep(interval);
+            if Instant::now() - start >= timeout {
+                break Err("Timed out waiting for node to complete!");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+pub use test_only::*;

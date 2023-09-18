@@ -63,16 +63,24 @@ impl FileTree {
         self.contents.keys().collect()
     }
 
-    pub(crate) fn filter_files<T: AsRef<str>>(&self, filters: &[T]) -> FileTree {
-        FileTree {
-            contents: self
-                .contents
-                .iter()
-                .filter(|entry| entry.0.glob_match(filters))
-                .map(|entry| (entry.0.clone(), *entry.1))
-                .collect(),
-            store: self.store.clone(),
-        }
+    /// Splits files into two cloned [`FileTree`] objects based on whether they match the provided
+    /// filters. The first returned value contains the files that match the filters.
+    pub(crate) fn filter_files<T: AsRef<str>>(&self, filters: &[T]) -> (FileTree, FileTree) {
+        let (matched, inverse) = self
+            .contents
+            .iter()
+            .map(|entry| (entry.0.clone(), *entry.1))
+            .partition::<HashMap<FilePath, u128>, _>(|entry| entry.0.glob_match(filters));
+        (
+            FileTree {
+                contents: matched,
+                store: self.store.clone(),
+            },
+            FileTree {
+                contents: inverse,
+                store: self.store.clone(),
+            },
+        )
     }
 }
 
@@ -178,47 +186,81 @@ mod tests {
         files.add_file(&path3, "Foo".into());
         files.add_file(&path4, "Bar".into());
 
+        // Filter by root path
         assert_eq!(
             files
                 .filter_files(&["overrides/**/*"])
+                .0
                 .list_files()
                 .symmetric_difference(&[&path1, &path2].into())
                 .count(),
             0
         );
+
+        // Inverse
+        assert_eq!(
+            files
+                .filter_files(&["overrides/**/*"])
+                .1
+                .list_files()
+                .symmetric_difference(&[&path3, &path4].into())
+                .count(),
+            0
+        );
+
+        // Filter by file extension
         assert_eq!(
             files
                 .filter_files(&["**/*.cfg"])
+                .0
                 .list_files()
                 .symmetric_difference(&[&path2, &path3].into())
                 .count(),
             0
         );
+
+        // Filter by multiple file extensions
         assert_eq!(
             files
                 .filter_files(&["**/*.jar", "**/*.cfg"])
+                .0
                 .list_files()
                 .symmetric_difference(&[&path1, &path2, &path3].into())
                 .count(),
             0
         );
+
+        // Filter by root path pattern and file extension
         assert_eq!(
             files
                 .filter_files(&["*overrides/**/*.cfg"])
+                .0
                 .list_files()
                 .symmetric_difference(&[&path2, &path3].into())
                 .count(),
             0
         );
+
+        // Filter by subdirectory
         assert_eq!(
             files
                 .filter_files(&["**/config/**"])
+                .0
                 .list_files()
                 .symmetric_difference(&[&path2, &path3, &path4].into())
                 .count(),
             0
         );
-        // This assertion fails, potentially due to a bug in glob-match. More investigation is needed.
-        // assert_eq!(files.filter_files(&["!**/*.md"]).list_files().symmetric_difference(&[&path1, &path2, &path3].into()).count(), 0);
+
+        // Exclude specific file
+        assert_eq!(
+            files
+                .filter_files(&["other/config/readme.md"])
+                .1
+                .list_files()
+                .symmetric_difference(&[&path1, &path2, &path3].into())
+                .count(),
+            0
+        );
     }
 }

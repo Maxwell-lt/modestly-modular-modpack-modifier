@@ -54,8 +54,12 @@ impl NodeConfig for ArchiveDownloaderNode {
 #[cfg(test)]
 mod tests {
     use crate::{
-        di::{container::{ChannelId, InputType}, logger::LogLevel},
+        di::{
+            container::{ChannelId, InputType},
+            logger::LogLevel,
+        },
         file::{filepath::FilePath, filetree::FileTree},
+        node::utils::read_channel,
     };
     use std::thread::sleep;
     use std::{
@@ -91,20 +95,8 @@ mod tests {
         ctx.run().unwrap();
 
         // Get results from node
-        let start = Instant::now();
         let timeout = Duration::from_secs(30);
-        let interval = Duration::from_millis(250);
-        let output: FileTree = loop {
-            sleep(interval);
-            if Instant::now() - start >= timeout {
-                panic!("Timed out waiting for node to complete!");
-            }
-
-            match output_rx.try_recv() {
-                Ok(res) => break res,
-                Err(..) => continue,
-            }
-        };
+        let output: FileTree = read_channel(&mut output_rx, timeout).unwrap();
         handle.join().unwrap();
         assert!(output.get_file(&FilePath::from_str("modrinth.index.json").unwrap()).is_some());
         assert!(!ctx.get_logger().get_logs().any(|log| log.level == LogLevel::Panic));
