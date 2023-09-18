@@ -9,7 +9,7 @@ use thiserror::Error;
 
 #[enum_dispatch]
 pub(crate) trait NodeConfig {
-    fn validate_and_spawn(&self, node_id: &str, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError>;
+    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError>;
 }
 
 #[derive(Debug, Error)]

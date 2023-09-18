@@ -1,5 +1,6 @@
 use super::config::{NodeConfig, NodeInitError};
 use super::utils;
+use super::utils::log_err;
 use crate::{
     di::container::{ChannelId, DiContainer, InputType, OutputType},
     file::{filepath::FilePath, filetree::FileTree},
@@ -18,32 +19,34 @@ pub struct ArchiveDownloaderNode;
 const URL: &str = "url";
 
 impl NodeConfig for ArchiveDownloaderNode {
-    fn validate_and_spawn(&self, node_id: &str, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
-        let out_channel = utils::get_output!(ChannelId(node_id.into(), "default".into()), Files, ctx);
+    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
+        let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx);
         let mut in_channel = utils::get_input!(URL, Text, ctx, input_ids);
         let fs = ctx.get_filestore();
         let mut waker = ctx.get_waker();
+        let logger = ctx.get_logger();
         Ok(spawn(move || {
-            waker.blocking_recv().unwrap();
-            let url = in_channel.blocking_recv().unwrap();
+            log_err(waker.blocking_recv(), &logger, &node_id);
+            let url = log_err(in_channel.blocking_recv(), &logger, &node_id);
 
-            let response = reqwest::blocking::get(url).unwrap();
-            let archive = response.bytes().unwrap();
+            let response = log_err(reqwest::blocking::get(url), &logger, &node_id);
+            let archive = log_err(response.bytes(), &logger, &node_id);
 
-            let mut zip_archive = ZipArchive::new(std::io::Cursor::new(archive)).unwrap();
+            let mut zip_archive = log_err(ZipArchive::new(std::io::Cursor::new(archive)), &logger, &node_id);
             let mut filetree = FileTree::new(fs);
             for index in 0..zip_archive.len() {
-                let mut file = zip_archive.by_index(index).unwrap();
+                let mut file = log_err(zip_archive.by_index(index), &logger, &node_id);
                 if file.is_file() {
-                    let mut contents: Vec<u8> = Vec::with_capacity(file.size().try_into().unwrap());
+                    let mut contents: Vec<u8> = Vec::with_capacity(file.size() as usize);
                     file.read_to_end(&mut contents).unwrap();
-                    let filename = FilePath::try_from(file.enclosed_name().unwrap()).unwrap();
+                    // As in FilePath, we don't care about properly handling "interesting" paths.
+                    let filename = log_err(FilePath::try_from(file.mangled_name().as_ref()), &logger, &node_id);
 
                     filetree.add_file(&filename, contents);
                 }
             }
 
-            out_channel.send(filetree).unwrap();
+            log_err(out_channel.send(filetree), &logger, &node_id);
         }))
     }
 }
@@ -51,7 +54,7 @@ impl NodeConfig for ArchiveDownloaderNode {
 #[cfg(test)]
 mod tests {
     use crate::{
-        di::container::{ChannelId, InputType},
+        di::{container::{ChannelId, InputType}, logger::LogLevel},
         file::{filepath::FilePath, filetree::FileTree},
     };
     use std::thread::sleep;
@@ -76,12 +79,12 @@ mod tests {
                 InputType::Text(url_channel.clone()),
             ),
             (
-                ChannelId("archive_downloader_test".to_string(), "default".to_string()),
+                ChannelId(node_id.to_string(), "default".to_string()),
                 InputType::Files(output_channel.clone()),
             ),
         ]);
         let ctx = DiContainer::new(HashMap::new(), container_channels);
-        let handle = ArchiveDownloaderNode {}.validate_and_spawn(node_id, input_ids, &ctx).unwrap();
+        let handle = ArchiveDownloaderNode {}.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
 
         // Wake nodes and simulate dependency node(s)
         url_channel.send(url.to_string()).unwrap();
@@ -104,5 +107,6 @@ mod tests {
         };
         handle.join().unwrap();
         assert!(output.get_file(&FilePath::from_str("modrinth.index.json").unwrap()).is_some());
+        assert!(!ctx.get_logger().get_logs().any(|log| log.level == LogLevel::Panic));
     }
 }

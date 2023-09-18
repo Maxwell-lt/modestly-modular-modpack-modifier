@@ -32,3 +32,21 @@ macro_rules! get_input {
 
 pub(super) use get_input;
 pub(super) use get_output;
+
+use crate::di::logger::{LogLevel, Logger};
+
+/// Unwrap a [`Result`], but pass a message to a provided [`Logger`] before panicking on [`Err`].
+///
+/// Current implementation does not allow caller to attach a custom error message.
+pub(super) fn log_err<T, E>(result: Result<T, E>, logger: &Logger, id: &str) -> T
+where
+    E: std::fmt::Display,
+{
+    match result {
+        Ok(val) => val,
+        Err(e) => {
+            logger.log(id.into(), LogLevel::Panic, "Something went wrong!".to_string(), Some(vec![e.to_string()]));
+            panic!();
+        },
+    }
+}

@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use super::config::{NodeConfig, NodeInitError};
 use super::utils;
+use super::utils::log_err;
 
 #[derive(Debug, Clone, Deserialize)]
 struct FileFilterNode;
@@ -16,18 +17,19 @@ const FILES: &str = "files";
 const PATTERN: &str = "pattern";
 
 impl NodeConfig for FileFilterNode {
-    fn validate_and_spawn(&self, node_id: &str, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
-        let out_channel = utils::get_output!(ChannelId(node_id.into(), "default".into()), Files, ctx);
+    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
+        let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx);
         let mut file_input_channel = utils::get_input!(FILES, Files, ctx, input_ids);
         let mut pattern_input_channel = utils::get_input!(PATTERN, List, ctx, input_ids);
         let mut waker = ctx.get_waker();
+        let logger = ctx.get_logger();
         Ok(spawn(move || {
-            waker.blocking_recv().unwrap();
-            let source_filetree = file_input_channel.blocking_recv().unwrap();
-            let pattern = pattern_input_channel.blocking_recv().unwrap();
+            log_err(waker.blocking_recv(), &logger, &node_id);
+            let source_filetree = log_err(file_input_channel.blocking_recv(), &logger, &node_id);
+            let pattern = log_err(pattern_input_channel.blocking_recv(), &logger, &node_id);
 
             let output_filetree = source_filetree.filter_files(&pattern);
-            out_channel.send(output_filetree).unwrap();
+            log_err(out_channel.send(output_filetree), &logger, &node_id);
         }))
     }
 }
@@ -41,8 +43,8 @@ mod tests {
     };
 
     use crate::{
-        di::container::InputType,
-        filetree::{filepath::FilePath, filetree::FileTree},
+        di::{container::InputType, logger::LogLevel},
+        file::{filepath::FilePath, filetree::FileTree},
     };
 
     use super::*;
@@ -80,7 +82,7 @@ mod tests {
 
         let filters: Vec<String> = vec!["overrides/**".into()];
 
-        let handle = FileFilterNode {}.validate_and_spawn("filter_node", channel_ids, &ctx).unwrap();
+        let handle = FileFilterNode {}.validate_and_spawn("filter_node".into(), channel_ids, &ctx).unwrap();
 
         file_in_channel.send(source_tree).unwrap();
         filter_in_channel.send(filters).unwrap();
@@ -107,5 +109,6 @@ mod tests {
             std::str::from_utf8(&result.get_file(&FilePath::from_str("overrides/config/mymod.cfg").unwrap()).unwrap()).unwrap(),
             "B:MyConfigValue = false"
         );
+        assert!(!ctx.get_logger().get_logs().any(|log| log.level == LogLevel::Panic));
     }
 }

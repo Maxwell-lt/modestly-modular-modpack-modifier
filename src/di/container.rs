@@ -6,6 +6,8 @@ use tokio::sync::broadcast;
 
 use crate::file::{filepath::FilePath, filestore::FileStore, filetree::FileTree};
 
+use super::logger::Logger;
+
 pub(crate) struct DiContainer {
     // Global config values (e.g. API keys)
     configs: HashMap<String, String>,
@@ -19,6 +21,8 @@ pub(crate) struct DiContainer {
     // by nodes that take no inputs would not be sent to nodes yet to
     // be initialized if it began processing post-init.
     waker: broadcast::Sender<()>,
+    // Log messages
+    logs: Logger,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +66,7 @@ impl DiContainer {
             channels,
             filestore: FileStore::new(),
             waker: broadcast::channel::<()>(1).0,
+            logs: Logger::new(),
         }
     }
 
@@ -87,6 +92,10 @@ impl DiContainer {
 
     pub(crate) fn run(&self) -> Result<usize> {
         Ok(self.waker.send(())?)
+    }
+
+    pub(crate) fn get_logger(&self) -> Logger {
+        self.logs.clone()
     }
 }
 
