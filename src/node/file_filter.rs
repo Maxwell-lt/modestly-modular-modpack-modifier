@@ -10,8 +10,8 @@ use super::config::{NodeConfig, NodeInitError};
 use super::utils;
 use super::utils::log_err;
 
-#[derive(Debug, Clone, Deserialize)]
-struct FileFilterNode;
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct FileFilterNode;
 
 const FILES: &str = "files";
 const PATTERN: &str = "pattern";

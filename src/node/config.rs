@@ -1,10 +1,9 @@
 use std::{collections::HashMap, thread::JoinHandle};
 
-use super::archive_downloader::ArchiveDownloaderNode;
+use super::{archive_downloader::ArchiveDownloaderNode, file_filter::FileFilterNode};
 use crate::di::container::{ChannelId, DiContainer};
 use enum_dispatch::enum_dispatch;
 use serde::Deserialize;
-use serde_yaml::Number;
 use thiserror::Error;
 
 #[enum_dispatch]
@@ -25,36 +24,112 @@ pub enum NodeInitError {
 }
 
 #[enum_dispatch(NodeConfig)]
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(tag = "kind")]
 pub enum NodeConfigTypes {
     ArchiveDownloaderNode,
+    FileFilterNode,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "untagged")]
-enum SourceValue {
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum SourceValue {
     Text(String),
-    Number(Number),
+    Number(i64),
     List(Vec<String>),
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct NodeDefinition {
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct NodeDefinition {
+    #[serde(flatten)]
     kind: NodeConfigTypes,
     id: String,
     input: HashMap<String, ChannelId>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct SourceDefinition {
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct SourceDefinition {
     id: String,
     value: SourceValue,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct OutputDefinition {
+    filename: String,
+    source: ChannelId,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
-enum NodeConfigEntry {
+pub enum NodeConfigEntry {
     Node(NodeDefinition),
     Source(SourceDefinition),
+    Output(OutputDefinition),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize() {
+        let yaml = r#"---
+- id: pack-url
+  value: https://example.com/my-pack.zip
+- id: filter-pattern
+  value:
+  - overrides/**
+  - modrinth.index.json
+  - resource-packs/**
+- id: number
+  value: 65536
+- id: download
+  kind: ArchiveDownloaderNode
+  input:
+    url: [pack-url, default]
+- id: filter
+  kind: FileFilterNode
+  input:
+    files: [download, default]
+    pattern: [filter-pattern, default]
+- filename: my-pack
+  source: [filter, default]"#;
+        let nodes: Vec<NodeConfigEntry> = serde_yaml::from_str(yaml).unwrap();
+        let expected = [
+            NodeConfigEntry::Source(SourceDefinition {
+                id: "pack-url".into(),
+                value: SourceValue::Text("https://example.com/my-pack.zip".into()),
+            }),
+            NodeConfigEntry::Source(SourceDefinition {
+                id: "filter-pattern".into(),
+                value: SourceValue::List(vec!["overrides/**".into(), "modrinth.index.json".into(), "resource-packs/**".into()]),
+            }),
+            NodeConfigEntry::Source(SourceDefinition {
+                id: "number".into(),
+                value: SourceValue::Number((65536).into()),
+            }),
+            NodeConfigEntry::Node(NodeDefinition {
+                kind: NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode),
+                id: "download".into(),
+                input: HashMap::from([("url".into(), ChannelId("pack-url".into(), "default".into()))]),
+            }),
+            NodeConfigEntry::Node(NodeDefinition {
+                kind: NodeConfigTypes::FileFilterNode(FileFilterNode),
+                id: "filter".into(),
+                input: HashMap::from([
+                    ("files".into(), ChannelId("download".into(), "default".into())),
+                    ("pattern".into(), ChannelId("filter-pattern".into(), "default".into())),
+                ]),
+            }),
+            NodeConfigEntry::Output(OutputDefinition {
+                filename: "my-pack".into(),
+                source: ChannelId("filter".into(), "default".into()),
+            }),
+        ];
+        println!("{:?}", nodes);
+        assert_eq!(nodes.len(), expected.len());
+        for (a, e) in nodes.iter().zip(expected.iter()) {
+            assert_eq!(a, e);
+        }
+    }
 }

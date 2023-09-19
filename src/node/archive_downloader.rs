@@ -13,7 +13,7 @@ use std::{
 };
 use zip::read::ZipArchive;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct ArchiveDownloaderNode;
 
 const URL: &str = "url";
@@ -61,10 +61,9 @@ mod tests {
         file::{filepath::FilePath, filetree::FileTree},
         node::utils::read_channel,
     };
-    use std::thread::sleep;
     use std::{
         str::FromStr,
-        time::{Duration, Instant},
+        time::Duration,
     };
 
     use super::*;
