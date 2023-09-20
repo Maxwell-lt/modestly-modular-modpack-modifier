@@ -1,7 +1,7 @@
 use std::{collections::HashMap, thread::JoinHandle};
 
 use super::{archive_downloader::ArchiveDownloaderNode, file_filter::FileFilterNode};
-use crate::di::container::{ChannelId, DiContainer};
+use crate::di::container::{ChannelId, DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
 use serde::Deserialize;
 use thiserror::Error;
@@ -9,6 +9,7 @@ use thiserror::Error;
 #[enum_dispatch]
 pub(crate) trait NodeConfig {
     fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError>;
+    fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType>;
 }
 
 #[derive(Debug, Error)]

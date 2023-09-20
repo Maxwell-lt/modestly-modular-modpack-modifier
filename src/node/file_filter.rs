@@ -5,6 +5,7 @@ use std::{
 
 use crate::di::container::{ChannelId, DiContainer, InputType, OutputType};
 use serde::Deserialize;
+use tokio::sync::broadcast::channel;
 
 use super::config::{NodeConfig, NodeInitError};
 use super::utils;
@@ -33,6 +34,13 @@ impl NodeConfig for FileFilterNode {
             log_err(out_channel.send(output_filetree), &logger, &node_id);
             log_err(inverse_channel.send(inverse_filetree), &logger, &node_id);
         }))
+    }
+
+    fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType> {
+        HashMap::from([
+            (ChannelId(node_id.to_owned(), "default".into()), InputType::Files(channel(1).0)),
+            (ChannelId(node_id.to_owned(), "inverse".into()), InputType::Files(channel(1).0)),
+        ])
     }
 }
 

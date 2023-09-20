@@ -11,6 +11,7 @@ use std::{
     io::Read,
     thread::{spawn, JoinHandle},
 };
+use tokio::sync::broadcast::channel;
 use zip::read::ZipArchive;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -49,6 +50,10 @@ impl NodeConfig for ArchiveDownloaderNode {
             log_err(out_channel.send(filetree), &logger, &node_id);
         }))
     }
+
+    fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType> {
+        HashMap::from([(ChannelId(node_id.to_owned(), "default".into()), InputType::Files(channel(1).0))])
+    }
 }
 
 #[cfg(test)]
@@ -59,12 +64,9 @@ mod tests {
             logger::LogLevel,
         },
         file::{filepath::FilePath, filetree::FileTree},
-        node::utils::read_channel,
+        node::{config::NodeConfigTypes, utils::read_channel},
     };
-    use std::{
-        str::FromStr,
-        time::Duration,
-    };
+    use std::{str::FromStr, time::Duration};
 
     use super::*;
 
@@ -73,21 +75,22 @@ mod tests {
         // Setup context and spawn node thread
         let url = "https://cdn.modrinth.com/data/p87Jiw2q/versions/tW5eAKWB/LostEra_Modpack_1.6.1.mrpack";
         let url_channel = tokio::sync::broadcast::channel::<String>(1).0;
-        let (output_channel, mut output_rx) = tokio::sync::broadcast::channel::<FileTree>(1);
         let node_id = "archive_downloader_test";
         let input_ids = HashMap::from([("url".to_string(), ChannelId("test_node".to_string(), "test_output".to_string()))]);
-        let container_channels = HashMap::from([
-            (
-                ChannelId("test_node".to_string(), "test_output".to_string()),
-                InputType::Text(url_channel.clone()),
-            ),
-            (
-                ChannelId(node_id.to_string(), "default".to_string()),
-                InputType::Files(output_channel.clone()),
-            ),
-        ]);
+        let mut container_channels = HashMap::from([(
+            ChannelId("test_node".to_string(), "test_output".to_string()),
+            InputType::Text(url_channel.clone()),
+        )]);
+        let node = NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode);
+        node.generate_channels(&node_id).into_iter().for_each(|(k, v)| {
+            container_channels.insert(k, v);
+        });
         let ctx = DiContainer::new(HashMap::new(), container_channels);
-        let handle = ArchiveDownloaderNode {}.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
+        let mut output_rx = match ctx.get_receiver(&ChannelId(node_id.into(), "default".into())).unwrap() {
+            OutputType::Files(c) => c,
+            _ => panic!(),
+        };
+        let handle = node.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
 
         // Wake nodes and simulate dependency node(s)
         url_channel.send(url.to_string()).unwrap();
