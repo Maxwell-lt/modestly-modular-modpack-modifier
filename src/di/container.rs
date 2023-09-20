@@ -1,10 +1,9 @@
 use anyhow::Result;
-use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 
-use crate::file::{filepath::FilePath, filestore::FileStore, filetree::FileTree};
+use crate::file::{filestore::FileStore, filetree::FileTree};
 
 use super::logger::Logger;
 
@@ -28,9 +27,7 @@ pub(crate) struct DiContainer {
 #[derive(Debug, Clone)]
 pub(crate) enum InputType {
     Text(broadcast::Sender<String>),
-    Path(broadcast::Sender<FilePath>),
     Files(broadcast::Sender<FileTree>),
-    Regex(broadcast::Sender<Regex>),
     List(broadcast::Sender<Vec<String>>),
 }
 
@@ -38,9 +35,7 @@ impl InputType {
     fn subscribe(&self) -> OutputType {
         match self {
             InputType::Text(c) => OutputType::Text(c.subscribe()),
-            InputType::Path(c) => OutputType::Path(c.subscribe()),
             InputType::Files(c) => OutputType::Files(c.subscribe()),
-            InputType::Regex(c) => OutputType::Regex(c.subscribe()),
             InputType::List(c) => OutputType::List(c.subscribe()),
         }
     }
@@ -49,9 +44,7 @@ impl InputType {
 #[derive(Debug)]
 pub(crate) enum OutputType {
     Text(broadcast::Receiver<String>),
-    Path(broadcast::Receiver<FilePath>),
     Files(broadcast::Receiver<FileTree>),
-    Regex(broadcast::Receiver<Regex>),
     List(broadcast::Receiver<Vec<String>>),
 }
 
