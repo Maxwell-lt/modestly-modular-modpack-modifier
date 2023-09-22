@@ -22,11 +22,16 @@ impl NodeConfig for DirectoryMerger {
         // pro: simpler to implement this way
         // con: how do I document to users "just connect these channels to literally any name, just
         // for the DirectoryMerger node"
-        let mut input_channels = input_ids
-            .keys()
-            .cloned()
-            .map(|id| get_input!(&id, Files, ctx, input_ids))
-            .collect::<Result<Vec<Receiver<_>>, _>>()?;
+        let mut input_channels = {
+            let mut keys = input_ids.keys().cloned().collect::<Vec<_>>();
+            // Ordering matters when input directories have files at the same paths. Sort by input
+            // names to ensure deterministic behavior.
+            // Sorting is reversed; earlier input names take priority with overlapping files.
+            keys.sort_unstable_by(|a, b| b.cmp(a));
+            keys.into_iter()
+                .map(|id| get_input!(&id, Files, ctx, input_ids))
+                .collect::<Result<Vec<Receiver<_>>, _>>()
+        }?;
         let output_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
         let logger = ctx.get_logger();
         let mut waker = ctx.get_waker();
@@ -75,13 +80,14 @@ mod tests {
         tree1.add_file(FilePath::from_str("dir/file.txt").unwrap(), "abc".into());
         tree2.add_file(FilePath::from_str("file.json").unwrap(), "def".into());
         tree3.add_file(FilePath::from_str("readme.md").unwrap(), "ghi".into());
+        // File overlaps with tree2
+        tree3.add_file(FilePath::from_str("file.json").unwrap(), "jkl".into());
 
         let node = NodeConfigTypes::DirectoryMerger(DirectoryMerger);
         let mut channels = node.generate_channels(node_id);
         let c1 = tokio::sync::broadcast::channel::<FileTree>(1).0;
         let c2 = tokio::sync::broadcast::channel::<FileTree>(1).0;
         let c3 = tokio::sync::broadcast::channel::<FileTree>(1).0;
-        //let out = match channels.get(&ChannelId::from_str(node_id).unwrap()).unwrap() { InputType::Files(c) => c.clone(), _ => panic!()};
         channels.insert(ChannelId::from_str("tree1").unwrap(), InputType::Files(c1.clone()));
         channels.insert(ChannelId::from_str("tree2").unwrap(), InputType::Files(c2.clone()));
         channels.insert(ChannelId::from_str("tree3").unwrap(), InputType::Files(c3.clone()));
@@ -93,7 +99,10 @@ mod tests {
         ]);
 
         let ctx = DiContainer::new(HashMap::new(), channels);
-        let mut out = match ctx.get_receiver(&ChannelId::from_str(node_id).unwrap()).unwrap() { OutputType::Files(c) => c, _ => panic!() };
+        let mut out = match ctx.get_receiver(&ChannelId::from_str(node_id).unwrap()).unwrap() {
+            OutputType::Files(c) => c,
+            _ => panic!(),
+        };
 
         node.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
 
@@ -104,9 +113,19 @@ mod tests {
 
         let result = read_channel(&mut out, Duration::from_secs(30)).unwrap();
 
-        assert_eq!(std::str::from_utf8(&result.get_file(&FilePath::from_str("dir/file.txt").unwrap()).unwrap()).unwrap(), "abc");
-        assert_eq!(std::str::from_utf8(&result.get_file(&FilePath::from_str("file.json").unwrap()).unwrap()).unwrap(), "def");
-        assert_eq!(std::str::from_utf8(&result.get_file(&FilePath::from_str("readme.md").unwrap()).unwrap()).unwrap(), "ghi");
+        assert_eq!(
+            std::str::from_utf8(&result.get_file(&FilePath::from_str("dir/file.txt").unwrap()).unwrap()).unwrap(),
+            "abc"
+        );
+        // tree2's copy should win, as "tree2" sorts higher than "tree3"
+        assert_eq!(
+            std::str::from_utf8(&result.get_file(&FilePath::from_str("file.json").unwrap()).unwrap()).unwrap(),
+            "def"
+        );
+        assert_eq!(
+            std::str::from_utf8(&result.get_file(&FilePath::from_str("readme.md").unwrap()).unwrap()).unwrap(),
+            "ghi"
+        );
         assert_eq!(result.list_files().len(), 3);
     }
 }

@@ -82,7 +82,7 @@ mod tests {
             InputType::Text(url_channel.clone()),
         )]);
         let node = NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode);
-        container_channels.extend(node.generate_channels(&node_id).into_iter());
+        container_channels.extend(node.generate_channels(node_id).into_iter());
         let ctx = DiContainer::new(HashMap::new(), container_channels);
         let mut output_rx = match ctx.get_receiver(&ChannelId(node_id.into(), "default".into())).unwrap() {
             OutputType::Files(c) => c,

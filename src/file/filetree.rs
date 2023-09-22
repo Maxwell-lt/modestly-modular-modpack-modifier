@@ -97,8 +97,7 @@ impl FileTree {
                 other
                     .contents
                     .into_iter()
-                    .map(|(k, v)| other.store.get_file(v).map(|v| (k, v)))
-                    .flatten() // Ignore None
+                    .filter_map(|(k, v)| other.store.get_file(v).map(|v| (k, v))) // Ignore None
                     .for_each(|(k, v)| {
                         self.add_file(k, v.as_ref().clone());
                     });

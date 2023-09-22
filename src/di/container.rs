@@ -60,7 +60,7 @@ impl FromStr for ChannelId {
         match parts.len() {
             2 => Ok(ChannelId(parts[0].to_string(), parts[1].to_string())),
             1 => Ok(ChannelId(parts[0].to_string(), "default".into())),
-            _ => Err(format!("Tried to parse ChannelId from invalid string: '{}'", s).into())
+            _ => Err(format!("Tried to parse ChannelId from invalid string: '{}'", s))
         }
     }
 }
@@ -180,8 +180,8 @@ mod tests {
 
     #[test]
     fn parse_channel_id() {
-        assert_eq!(ChannelId::from_str("channel:name".into()).unwrap(), ChannelId("channel:name".into(), "default".into()));
-        assert_eq!(ChannelId::from_str("node::port".into()).unwrap(), ChannelId("node".into(), "port".into()));
+        assert_eq!(ChannelId::from_str("channel:name").unwrap(), ChannelId("channel:name".into(), "default".into()));
+        assert_eq!(ChannelId::from_str("node::port").unwrap(), ChannelId("node".into(), "port".into()));
         assert!(ChannelId::from_str("").is_err());
         assert!(ChannelId::from_str("node::port::extra").is_err());
     }

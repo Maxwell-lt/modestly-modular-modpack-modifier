@@ -115,19 +115,19 @@ mod tests {
             NodeConfigEntry::Node(NodeDefinition {
                 kind: NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode),
                 id: "download".into(),
-                input: HashMap::from([("url".into(), ChannelId::from_str("pack-url".into()).unwrap())]),
+                input: HashMap::from([("url".into(), ChannelId::from_str("pack-url").unwrap())]),
             }),
             NodeConfigEntry::Node(NodeDefinition {
                 kind: NodeConfigTypes::FileFilterNode(FileFilterNode),
                 id: "filter".into(),
                 input: HashMap::from([
-                    ("files".into(), ChannelId::from_str("download".into()).unwrap()),
-                    ("pattern".into(), ChannelId::from_str("filter-pattern::default".into()).unwrap()),
+                    ("files".into(), ChannelId::from_str("download").unwrap()),
+                    ("pattern".into(), ChannelId::from_str("filter-pattern::default").unwrap()),
                 ]),
             }),
             NodeConfigEntry::Output(OutputDefinition {
                 filename: "my-pack".into(),
-                source: ChannelId::from_str("filter".into()).unwrap(),
+                source: ChannelId::from_str("filter").unwrap(),
             }),
         ];
         println!("{:?}", nodes);

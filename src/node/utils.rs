@@ -59,9 +59,8 @@ mod test_only {
         let start = Instant::now();
         let interval = Duration::from_millis(50);
         loop {
-            match channel.try_recv() {
-                Ok(res) => break Ok(res),
-                Err(..) => (),
+            if let Ok(res) = channel.try_recv() {
+                break Ok(res);
             }
 
             sleep(interval);
