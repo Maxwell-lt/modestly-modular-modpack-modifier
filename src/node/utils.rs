@@ -4,8 +4,8 @@ macro_rules! get_output {
             .get_sender(&$channel)
             .ok_or_else(|| NodeInitError::MissingChannel($channel.clone()))?
         {
-            InputType::$variant(c) => c,
-            _ => return Err(NodeInitError::InvalidOutputType($channel)),
+            InputType::$variant(c) => Ok(c),
+            _ => Err(NodeInitError::InvalidOutputType($channel)),
         }
     };
 }
@@ -19,13 +19,11 @@ macro_rules! get_input {
             .get_receiver(&channel_id)
             .ok_or_else(|| NodeInitError::MissingChannel(channel_id.to_owned()))?
         {
-            OutputType::$variant(c) => c,
-            _ => {
-                return Err(NodeInitError::InvalidInputType {
-                    input: $input_name.to_owned(),
-                    channel: channel_id.clone(),
-                })
-            },
+            OutputType::$variant(c) => Ok(c),
+            _ => Err(NodeInitError::InvalidInputType {
+                input: $input_name.to_owned(),
+                channel: channel_id.clone(),
+            }),
         }
     }};
 }

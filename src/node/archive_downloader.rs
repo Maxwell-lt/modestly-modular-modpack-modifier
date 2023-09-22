@@ -21,8 +21,8 @@ const URL: &str = "url";
 
 impl NodeConfig for ArchiveDownloaderNode {
     fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
-        let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx);
-        let mut in_channel = utils::get_input!(URL, Text, ctx, input_ids);
+        let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
+        let mut in_channel = utils::get_input!(URL, Text, ctx, input_ids)?;
         let fs = ctx.get_filestore();
         let mut waker = ctx.get_waker();
         let logger = ctx.get_logger();
@@ -43,7 +43,7 @@ impl NodeConfig for ArchiveDownloaderNode {
                     // As in FilePath, we don't care about properly handling "interesting" paths.
                     let filename = log_err(FilePath::try_from(file.mangled_name().as_ref()), &logger, &node_id);
 
-                    filetree.add_file(&filename, contents);
+                    filetree.add_file(filename, contents);
                 }
             }
 
@@ -82,9 +82,7 @@ mod tests {
             InputType::Text(url_channel.clone()),
         )]);
         let node = NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode);
-        node.generate_channels(&node_id).into_iter().for_each(|(k, v)| {
-            container_channels.insert(k, v);
-        });
+        container_channels.extend(node.generate_channels(&node_id).into_iter());
         let ctx = DiContainer::new(HashMap::new(), container_channels);
         let mut output_rx = match ctx.get_receiver(&ChannelId(node_id.into(), "default".into())).unwrap() {
             OutputType::Files(c) => c,

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, thread::JoinHandle};
 
-use super::{archive_downloader::ArchiveDownloaderNode, file_filter::FileFilterNode};
+use super::{archive_downloader::ArchiveDownloaderNode, file_filter::FileFilterNode, dir_merge::DirectoryMerger};
 use crate::di::container::{ChannelId, DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
 use serde::Deserialize;
@@ -30,6 +30,7 @@ pub enum NodeInitError {
 pub enum NodeConfigTypes {
     ArchiveDownloaderNode,
     FileFilterNode,
+    DirectoryMerger,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -70,6 +71,8 @@ pub enum NodeConfigEntry {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
@@ -87,14 +90,14 @@ mod tests {
 - id: download
   kind: ArchiveDownloaderNode
   input:
-    url: [pack-url, default]
+    url: pack-url
 - id: filter
   kind: FileFilterNode
   input:
-    files: [download, default]
-    pattern: [filter-pattern, default]
+    files: download
+    pattern: filter-pattern::default
 - filename: my-pack
-  source: [filter, default]"#;
+  source: filter"#;
         let nodes: Vec<NodeConfigEntry> = serde_yaml::from_str(yaml).unwrap();
         let expected = [
             NodeConfigEntry::Source(SourceDefinition {
@@ -112,19 +115,19 @@ mod tests {
             NodeConfigEntry::Node(NodeDefinition {
                 kind: NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode),
                 id: "download".into(),
-                input: HashMap::from([("url".into(), ChannelId("pack-url".into(), "default".into()))]),
+                input: HashMap::from([("url".into(), ChannelId::from_str("pack-url".into()).unwrap())]),
             }),
             NodeConfigEntry::Node(NodeDefinition {
                 kind: NodeConfigTypes::FileFilterNode(FileFilterNode),
                 id: "filter".into(),
                 input: HashMap::from([
-                    ("files".into(), ChannelId("download".into(), "default".into())),
-                    ("pattern".into(), ChannelId("filter-pattern".into(), "default".into())),
+                    ("files".into(), ChannelId::from_str("download".into()).unwrap()),
+                    ("pattern".into(), ChannelId::from_str("filter-pattern::default".into()).unwrap()),
                 ]),
             }),
             NodeConfigEntry::Output(OutputDefinition {
                 filename: "my-pack".into(),
-                source: ChannelId("filter".into(), "default".into()),
+                source: ChannelId::from_str("filter".into()).unwrap(),
             }),
         ];
         println!("{:?}", nodes);

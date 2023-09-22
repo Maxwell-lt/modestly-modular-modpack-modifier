@@ -1,6 +1,6 @@
 use anyhow::Result;
-use serde::Deserialize;
-use std::collections::HashMap;
+use serde::{Deserialize, de};
+use std::{collections::HashMap, str::FromStr};
 use tokio::sync::broadcast;
 
 use crate::file::{filestore::FileStore, filetree::FileTree};
@@ -49,8 +49,31 @@ pub(crate) enum OutputType {
 }
 
 /// Stores a channel ID by a tuple of (output node name, output name)
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct ChannelId(pub String, pub String);
+
+impl FromStr for ChannelId {
+    type Err = String; 
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let parts = s.split("::").filter(|p| !p.is_empty()).collect::<Vec<_>>();
+        match parts.len() {
+            2 => Ok(ChannelId(parts[0].to_string(), parts[1].to_string())),
+            1 => Ok(ChannelId(parts[0].to_string(), "default".into())),
+            _ => Err(format!("Tried to parse ChannelId from invalid string: '{}'", s).into())
+        }
+    }
+}
+
+// From https://github.com/serde-rs/serde/issues/908
+impl<'de> Deserialize<'de> for ChannelId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        let s = String::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(de::Error::custom)
+    }
+}
 
 impl DiContainer {
     pub(crate) fn new(configs: HashMap<String, String>, channels: HashMap<ChannelId, InputType>) -> Self {
@@ -153,5 +176,13 @@ mod tests {
         waker_tx.send(()).unwrap();
 
         assert!(waker_rx.try_recv().is_ok());
+    }
+
+    #[test]
+    fn parse_channel_id() {
+        assert_eq!(ChannelId::from_str("channel:name".into()).unwrap(), ChannelId("channel:name".into(), "default".into()));
+        assert_eq!(ChannelId::from_str("node::port".into()).unwrap(), ChannelId("node".into(), "port".into()));
+        assert!(ChannelId::from_str("").is_err());
+        assert!(ChannelId::from_str("node::port::extra").is_err());
     }
 }

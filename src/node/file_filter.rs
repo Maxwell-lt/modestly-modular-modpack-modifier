@@ -19,10 +19,10 @@ const PATTERN: &str = "pattern";
 
 impl NodeConfig for FileFilterNode {
     fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
-        let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx);
-        let inverse_channel = utils::get_output!(ChannelId(node_id.clone(), "inverse".into()), Files, ctx);
-        let mut file_input_channel = utils::get_input!(FILES, Files, ctx, input_ids);
-        let mut pattern_input_channel = utils::get_input!(PATTERN, List, ctx, input_ids);
+        let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
+        let inverse_channel = utils::get_output!(ChannelId(node_id.clone(), "inverse".into()), Files, ctx)?;
+        let mut file_input_channel = utils::get_input!(FILES, Files, ctx, input_ids)?;
+        let mut pattern_input_channel = utils::get_input!(PATTERN, List, ctx, input_ids)?;
         let mut waker = ctx.get_waker();
         let logger = ctx.get_logger();
         Ok(spawn(move || {
@@ -84,9 +84,9 @@ mod tests {
         ]);
 
         let mut source_tree = FileTree::new(ctx.get_filestore());
-        source_tree.add_file(&FilePath::from_str("modrinth.index.json").unwrap(), "{}".into());
+        source_tree.add_file(FilePath::from_str("modrinth.index.json").unwrap(), "{}".into());
         source_tree.add_file(
-            &FilePath::from_str("overrides/config/mymod.cfg").unwrap(),
+            FilePath::from_str("overrides/config/mymod.cfg").unwrap(),
             "B:MyConfigValue = false".into(),
         );
 

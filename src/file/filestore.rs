@@ -61,6 +61,12 @@ impl FileStore {
     }
 }
 
+impl PartialEq for FileStore {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.data, &other.data)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,5 +150,16 @@ mod tests {
 
         // Check that all threads successfully found the file
         assert_eq!(10, counter.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn equality() {
+        let store = FileStore::new();
+        let cloned = store.clone();
+        let other = FileStore::new();
+
+        assert_eq!(store, cloned);
+        assert_ne!(store, other);
+        assert_ne!(cloned, other);
     }
 }

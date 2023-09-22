@@ -22,9 +22,9 @@ impl FileTree {
         }
     }
 
-    pub(crate) fn add_file(&mut self, path: &FilePath, file: Vec<u8>) {
+    pub(crate) fn add_file(&mut self, path: FilePath, file: Vec<u8>) {
         let hash = self.store.write_file(file);
-        self.contents.insert(path.clone(), hash);
+        self.contents.insert(path, hash);
     }
 
     pub(crate) fn get_file(&self, path: &FilePath) -> Option<Arc<Vec<u8>>> {
@@ -82,6 +82,29 @@ impl FileTree {
             },
         )
     }
+
+    /// Add all files from another [`FileTree`] to this one, consuming the other in the process.
+    /// If both [`FileTree`] objects share the same [`FileStore`], the hash references are simply copied
+    /// over. Otherwise, the file data are copied them into this [`FileTree`]'s underlying [`FileStore`].
+    /// Files in the consumed [`FileTree`] will overwrite files in this one with identical
+    /// [`FilePath`]s.
+    pub(crate) fn add_all(&mut self, other: FileTree) {
+        match self.store == other.store {
+            true => {
+                self.contents.extend(other.contents.into_iter());
+            },
+            false => {
+                other
+                    .contents
+                    .into_iter()
+                    .map(|(k, v)| other.store.get_file(v).map(|v| (k, v)))
+                    .flatten() // Ignore None
+                    .for_each(|(k, v)| {
+                        self.add_file(k, v.as_ref().clone());
+                    });
+            },
+        }
+    }
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -105,7 +128,7 @@ mod tests {
         let mut files = get_filetree();
         let path = FilePath::from_str("directory/file.txt").unwrap();
         let contents = "Hello World!";
-        files.add_file(&path, contents.into());
+        files.add_file(path.clone(), contents.into());
 
         assert_eq!(String::from_utf8(files.get_file(&path).unwrap().to_vec()).unwrap(), contents.to_string())
     }
@@ -114,7 +137,7 @@ mod tests {
     fn delete_file() {
         let mut files = get_filetree();
         let path = FilePath::from_str("directory/file.txt").unwrap();
-        files.add_file(&path, "Hello World!".into());
+        files.add_file(path.clone(), "Hello World!".into());
 
         files.delete_file(&path);
         assert_eq!(files.get_file(&path), None);
@@ -125,7 +148,7 @@ mod tests {
         let mut files = get_filetree();
         let path = FilePath::from_str("directory/file.txt").unwrap();
         let path2 = FilePath::from_str("directory_two/file_two.txt").unwrap();
-        files.add_file(&path, "Hello World!".into());
+        files.add_file(path.clone(), "Hello World!".into());
 
         files.copy_file(&path, &path2).unwrap();
         assert_eq!(files.get_file(&path).unwrap(), files.get_file(&path2).unwrap());
@@ -151,7 +174,7 @@ mod tests {
         let path = FilePath::from_str("directory/file.txt").unwrap();
         let path2 = FilePath::from_str("directory_two/file_two.txt").unwrap();
         let contents = "Hello World!";
-        files.add_file(&path, contents.into());
+        files.add_file(path.clone(), contents.into());
         files.move_file(&path, &path2).unwrap();
 
         assert_eq!(String::from_utf8(files.get_file(&path2).unwrap().to_vec()).unwrap(), contents.to_string());
@@ -166,7 +189,7 @@ mod tests {
         let path3 = FilePath::from_str("directory/file3.txt").unwrap();
         assert!(files.list_files().is_empty());
 
-        files.add_file(&path1, "Test".into());
+        files.add_file(path1.clone(), "Test".into());
         assert_eq!(files.list_files(), [&path1].into());
 
         files.copy_file(&path1, &path2).unwrap();
@@ -181,10 +204,10 @@ mod tests {
         let path2 = FilePath::from_str("overrides/config/config.cfg").unwrap();
         let path3 = FilePath::from_str("client_overrides/config/client.cfg").unwrap();
         let path4 = FilePath::from_str("other/config/readme.md").unwrap();
-        files.add_file(&path1, "Hello".into());
-        files.add_file(&path2, "World".into());
-        files.add_file(&path3, "Foo".into());
-        files.add_file(&path4, "Bar".into());
+        files.add_file(path1.clone(), "Hello".into());
+        files.add_file(path2.clone(), "World".into());
+        files.add_file(path3.clone(), "Foo".into());
+        files.add_file(path4.clone(), "Bar".into());
 
         // Filter by root path
         assert_eq!(
@@ -262,5 +285,49 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[test]
+    fn merge_distinct_contents_shared_store() {
+        let store = FileStore::new();
+        let mut tree1 = FileTree::new(store.clone());
+        let mut tree2 = FileTree::new(store);
+        tree1.add_file(FilePath::from_str("path1").unwrap(), "contents".into());
+        tree2.add_file(FilePath::from_str("path2").unwrap(), "other".into());
+        tree1.add_all(tree2);
+        assert_eq!(tree1.list_files().len(), 2);
+        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path1").unwrap()).unwrap()).unwrap(), "contents");
+        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path2").unwrap()).unwrap()).unwrap(), "other");
+    }
+
+    #[test]
+    fn merge_overlapping_contents() {
+        let store = FileStore::new();
+        let mut tree1 = FileTree::new(store.clone());
+        let mut tree2 = FileTree::new(store);
+        tree1.add_file(FilePath::from_str("from/tree1.txt").unwrap(), "a".into());
+        tree2.add_file(FilePath::from_str("from/tree2.txt").unwrap(), "b".into());
+        tree1.add_file(FilePath::from_str("shared").unwrap(), "c".into());
+        tree2.add_file(FilePath::from_str("shared").unwrap(), "d".into());
+        tree1.add_all(tree2);
+        assert_eq!(tree1.list_files().len(), 3);
+        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("from/tree1.txt").unwrap()).unwrap()).unwrap(), "a");
+        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("from/tree2.txt").unwrap()).unwrap()).unwrap(), "b");
+
+        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("shared").unwrap()).unwrap()).unwrap(), "d");
+    }
+
+    #[test]
+    fn merge_distinct_store() {
+        let store1 = FileStore::new();
+        let store2 = FileStore::new();
+        let mut tree1 = FileTree::new(store1);
+        let mut tree2 = FileTree::new(store2);
+        tree1.add_file(FilePath::from_str("path1").unwrap(), "contents".into());
+        tree2.add_file(FilePath::from_str("path2").unwrap(), "other".into());
+        tree1.add_all(tree2);
+        assert_eq!(tree1.list_files().len(), 2);
+        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path1").unwrap()).unwrap()).unwrap(), "contents");
+        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path2").unwrap()).unwrap()).unwrap(), "other");
     }
 }
