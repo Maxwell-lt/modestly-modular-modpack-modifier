@@ -19,16 +19,10 @@ enum_dispatch = "0.3.12"
 glob-match = "0.2.1"
 boxcar = "0.2.3"
 chrono = "0.4.31"
+reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+tokio = { version = "1.31", features = ["sync"] }
 
-[dependencies.reqwest]
-version = "0.11"
-default-features = false
-features = ["blocking", "json", "rustls-tls"]
-
-[dependencies.xxhash-rust]
-version = "0.8"
-features = ["xxh3"]
-
-[dependencies.tokio]
-version = "1.31"
-features = ["sync", "test-util"]
+[features]
+# Enable tests that depend on a valid Curse API key
+curse-test = []
