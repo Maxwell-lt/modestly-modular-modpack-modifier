@@ -6,6 +6,7 @@ use crate::{
     file::{filepath::FilePath, filetree::FileTree},
 };
 use serde::Deserialize;
+use std::io::Cursor;
 use std::{
     collections::HashMap,
     io::Read,
@@ -30,10 +31,11 @@ impl NodeConfig for ArchiveDownloaderNode {
             log_err(waker.blocking_recv(), &logger, &node_id);
             let url = log_err(in_channel.blocking_recv(), &logger, &node_id);
 
-            let response = log_err(reqwest::blocking::get(url), &logger, &node_id);
-            let archive = log_err(response.bytes(), &logger, &node_id);
+            let response = log_err(ureq::get(&url).call(), &logger, &node_id);
+            let mut archive = Vec::new();
+            log_err(response.into_reader().read_to_end(&mut archive), &logger, &node_id);
 
-            let mut zip_archive = log_err(ZipArchive::new(std::io::Cursor::new(archive)), &logger, &node_id);
+            let mut zip_archive = log_err(ZipArchive::new(Cursor::new(archive)), &logger, &node_id);
             let mut filetree = FileTree::new(fs);
             for index in 0..zip_archive.len() {
                 let mut file = log_err(zip_archive.by_index(index), &logger, &node_id);

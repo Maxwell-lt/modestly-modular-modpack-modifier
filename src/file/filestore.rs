@@ -38,7 +38,7 @@ impl FileStore {
     /// Returns [`None`] if any of the hashes are not found in the store.
     ///
     /// Locks the internal store for reading.
-    pub(crate) fn get_all_files(&self, hashes: &Vec<u128>) -> Option<Vec<Arc<Vec<u8>>>> {
+    pub(crate) fn get_all_files(&self, hashes: &[u128]) -> Option<Vec<Arc<Vec<u8>>>> {
         hashes.iter().map(|hash| self.data.get(hash).map(|r| r.value().clone())).collect()
     }
 

@@ -1,0 +1,2 @@
+mod curse;
+mod modrinth;

@@ -91,7 +91,7 @@ impl FileTree {
     pub(crate) fn add_all(&mut self, other: FileTree) {
         match self.store == other.store {
             true => {
-                self.contents.extend(other.contents.into_iter());
+                self.contents.extend(other.contents);
             },
             false => {
                 other
