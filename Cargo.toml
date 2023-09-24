@@ -13,7 +13,6 @@ serde_yaml = "0.9"
 anyhow = "1.0"
 zip = "0.6"
 tar = "0.4"
-parking_lot = "0.12"
 thiserror = "1.0.46"
 enum_dispatch = "0.3.12"
 glob-match = "0.2.1"
@@ -22,6 +21,7 @@ chrono = "0.4.31"
 reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 tokio = { version = "1.31", features = ["sync"] }
+dashmap = "5.5"
 
 [features]
 # Enable tests that depend on a valid Curse API key

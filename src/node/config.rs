@@ -1,6 +1,6 @@
 use std::{collections::HashMap, thread::JoinHandle};
 
-use super::{archive_downloader::ArchiveDownloaderNode, file_filter::FileFilterNode, dir_merge::DirectoryMerger};
+use super::{archive_downloader::ArchiveDownloaderNode, dir_merge::DirectoryMerger, file_filter::FileFilterNode};
 use crate::di::container::{ChannelId, DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
 use serde::Deserialize;

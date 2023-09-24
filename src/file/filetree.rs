@@ -295,8 +295,14 @@ mod tests {
         tree2.add_file(FilePath::from_str("path2").unwrap(), "other".into());
         tree1.add_all(tree2);
         assert_eq!(tree1.list_files().len(), 2);
-        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path1").unwrap()).unwrap()).unwrap(), "contents");
-        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path2").unwrap()).unwrap()).unwrap(), "other");
+        assert_eq!(
+            std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path1").unwrap()).unwrap()).unwrap(),
+            "contents"
+        );
+        assert_eq!(
+            std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path2").unwrap()).unwrap()).unwrap(),
+            "other"
+        );
     }
 
     #[test]
@@ -310,10 +316,19 @@ mod tests {
         tree2.add_file(FilePath::from_str("shared").unwrap(), "d".into());
         tree1.add_all(tree2);
         assert_eq!(tree1.list_files().len(), 3);
-        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("from/tree1.txt").unwrap()).unwrap()).unwrap(), "a");
-        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("from/tree2.txt").unwrap()).unwrap()).unwrap(), "b");
+        assert_eq!(
+            std::str::from_utf8(&tree1.get_file(&FilePath::from_str("from/tree1.txt").unwrap()).unwrap()).unwrap(),
+            "a"
+        );
+        assert_eq!(
+            std::str::from_utf8(&tree1.get_file(&FilePath::from_str("from/tree2.txt").unwrap()).unwrap()).unwrap(),
+            "b"
+        );
 
-        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("shared").unwrap()).unwrap()).unwrap(), "d");
+        assert_eq!(
+            std::str::from_utf8(&tree1.get_file(&FilePath::from_str("shared").unwrap()).unwrap()).unwrap(),
+            "d"
+        );
     }
 
     #[test]
@@ -326,7 +341,13 @@ mod tests {
         tree2.add_file(FilePath::from_str("path2").unwrap(), "other".into());
         tree1.add_all(tree2);
         assert_eq!(tree1.list_files().len(), 2);
-        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path1").unwrap()).unwrap()).unwrap(), "contents");
-        assert_eq!(std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path2").unwrap()).unwrap()).unwrap(), "other");
+        assert_eq!(
+            std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path1").unwrap()).unwrap()).unwrap(),
+            "contents"
+        );
+        assert_eq!(
+            std::str::from_utf8(&tree1.get_file(&FilePath::from_str("path2").unwrap()).unwrap()).unwrap(),
+            "other"
+        );
     }
 }
