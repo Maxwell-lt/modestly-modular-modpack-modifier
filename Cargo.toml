@@ -23,6 +23,7 @@ tokio = { version = "1.31", default-features = false, features = ["sync"] }
 dashmap = "5.5"
 ratelimit = "0.7.0"
 ureq = { version = "2.7", features = ["json"] }
+const_format = "0.2.31"
 
 [features]
 # Enable tests that depend on a valid Curse API key
