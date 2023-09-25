@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use ratelimit::Ratelimiter;
-use ureq::{Agent, AgentBuilder};
+use ureq::{Agent, AgentBuilder, MiddlewareNext, Request};
 
 use super::common::USER_AGENT;
 
@@ -12,7 +12,6 @@ pub struct CurseClient {
     ratelimit: Arc<Ratelimiter>,
     client: Arc<Agent>,
     base_url: Arc<String>,
-    key: Arc<Option<String>>,
 }
 
 /// CurseForge does not document any rate limits, so I just made something up.
@@ -26,12 +25,18 @@ fn get_ratelimit() -> Ratelimiter {
 
 impl CurseClient {
     /// Get a [`CurseClient`] that uses the official CurseForge API.
-    pub fn from_key(key: &str) -> Self {
+    pub fn from_key(key: String) -> Self {
         CurseClient {
             ratelimit: Arc::new(get_ratelimit()),
-            client: Arc::new(AgentBuilder::new().user_agent(USER_AGENT).build()),
+            client: Arc::new(
+                AgentBuilder::new()
+                    .user_agent(USER_AGENT)
+                    .middleware(move |req: Request, next: MiddlewareNext| {
+                        next.handle(req.set("x-api-key", &key))
+                    })
+                    .build(),
+            ),
             base_url: Arc::new(CURSEFORGE_BASE_URL.to_owned()),
-            key: Arc::new(Some(key.to_owned())),
         }
     }
 
@@ -41,7 +46,6 @@ impl CurseClient {
             ratelimit: Arc::new(get_ratelimit()),
             client: Arc::new(AgentBuilder::new().user_agent(USER_AGENT).build()),
             base_url: Arc::new(proxy_url.to_owned()),
-            key: Arc::new(None),
         }
     }
 }
