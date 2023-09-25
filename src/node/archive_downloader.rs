@@ -1,6 +1,7 @@
 use super::config::{NodeConfig, NodeInitError};
 use super::utils;
 use super::utils::log_err;
+use crate::api::common::download_archive;
 use crate::{
     di::container::{ChannelId, DiContainer, InputType, OutputType},
     file::{filepath::FilePath, filetree::FileTree},
@@ -31,9 +32,7 @@ impl NodeConfig for ArchiveDownloaderNode {
             log_err(waker.blocking_recv(), &logger, &node_id);
             let url = log_err(in_channel.blocking_recv(), &logger, &node_id);
 
-            let response = log_err(ureq::get(&url).call(), &logger, &node_id);
-            let mut archive = Vec::new();
-            log_err(response.into_reader().read_to_end(&mut archive), &logger, &node_id);
+            let archive = log_err(download_archive(&url), &logger, &node_id);
 
             let mut zip_archive = log_err(ZipArchive::new(Cursor::new(archive)), &logger, &node_id);
             let mut filetree = FileTree::new(fs);

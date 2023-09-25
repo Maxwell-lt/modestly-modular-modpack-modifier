@@ -1,3 +1,3 @@
-mod curse;
-mod modrinth;
-mod common;
+pub mod curse;
+pub mod modrinth;
+pub mod common;
