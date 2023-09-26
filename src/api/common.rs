@@ -54,11 +54,7 @@ impl ApiClientBuilder {
     }
 
     pub fn add_middleware(mut self, middleware: impl Middleware) -> Self {
-        // Is this seriously the best way to handle a builder that takes mut self?
-        let mut dummy = AgentBuilder::new();
-        std::mem::swap(&mut self.agent_builder, &mut dummy);
-        let mut dummy = dummy.middleware(middleware);
-        std::mem::swap(&mut self.agent_builder, &mut dummy);
+        self.agent_builder = std::mem::replace(&mut self.agent_builder, AgentBuilder::new()).middleware(middleware);
         self
     }
 
