@@ -39,6 +39,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
 
 [[package]]
+name = "api_client"
+version = "0.1.0"
+dependencies = [
+ "const_format",
+ "ratelimit",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror",
+ "ureq",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -403,27 +416,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "modestly-modular-modpack-modifier"
+name = "mmmm_core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "api_client",
  "boxcar",
  "chrono",
- "const_format",
  "dashmap",
  "enum_dispatch",
  "glob-match",
- "ratelimit",
  "serde",
  "serde_json",
  "serde_yaml",
  "tar",
  "thiserror",
  "tokio",
- "ureq",
  "xxhash-rust",
  "zip",
 ]
+
+[[package]]
+name = "modestly-modular-modpack-modifier-cli"
+version = "0.1.0"
 
 [[package]]
 name = "num-traits"

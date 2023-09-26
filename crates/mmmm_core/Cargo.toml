@@ -1,0 +1,25 @@
+[package]
+name = "mmmm_core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# 1.0.185 removes the binary blob experiment
+serde = { version = ">=1.0.185", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+anyhow = "1.0"
+zip = { version = "0.6", default-features = false, features = ["deflate", "bzip2", "zstd"]}
+tar = "0.4"
+thiserror = "1.0.46"
+enum_dispatch = "0.3.12"
+glob-match = "0.2.1"
+boxcar = "0.2.3"
+chrono = "0.4.31"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+tokio = { version = "1.31", default-features = false, features = ["sync"] }
+dashmap = "5.5"
+api_client = { path = "../api_client" }

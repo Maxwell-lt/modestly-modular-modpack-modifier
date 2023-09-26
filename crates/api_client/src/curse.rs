@@ -1,4 +1,4 @@
-use super::common::{ApiClient, ApiClientBuilder, USER_AGENT};
+use super::common::{ApiClient, ApiClientBuilder};
 
 static CURSEFORGE_BASE_URL: &str = "https://api.curseforge.com";
 

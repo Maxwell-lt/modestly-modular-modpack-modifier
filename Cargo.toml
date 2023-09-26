@@ -1,30 +1,8 @@
-[package]
-name = "modestly-modular-modpack-modifier"
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-# 1.0.185 removes the binary blob experiment
-serde = { version = ">=1.0.185", features = ["derive"] }
-serde_json = "1.0"
-serde_yaml = "0.9"
-anyhow = "1.0"
-zip = { version = "0.6", default-features = false, features = ["deflate", "bzip2", "zstd"]}
-tar = "0.4"
-thiserror = "1.0.46"
-enum_dispatch = "0.3.12"
-glob-match = "0.2.1"
-boxcar = "0.2.3"
-chrono = "0.4.31"
-xxhash-rust = { version = "0.8", features = ["xxh3"] }
-tokio = { version = "1.31", default-features = false, features = ["sync"] }
-dashmap = "5.5"
-ratelimit = "0.7.0"
-ureq = { version = "2.7", features = ["json"] }
-const_format = "0.2.31"
-
-[features]
-# Enable tests that depend on a valid Curse API key
-curse-test = []
+authors = ["maxwell-lt"]
