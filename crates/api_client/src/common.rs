@@ -9,21 +9,18 @@ pub const USER_AGENT: &str = const_format::formatcp!("modestly-modular-modpack-m
 #[derive(Error, Debug)]
 pub enum ArchiveDownloadError {
     #[error("Failed to download archive from URL {0}. Error: {1}")]
-    Download(String, ureq::Error),
+    Download(String, Box<ureq::Error>),
     #[error("Failed to read downloaded archive to bytes. Error: {0}")]
     Read(std::io::Error),
 }
 
 pub fn download_archive(url: &str) -> Result<Vec<u8>, ArchiveDownloadError> {
-    let response = ureq::get(&url)
+    let response = ureq::get(url)
         .set("User-Agent", USER_AGENT)
         .call()
-        .map_err(|e| ArchiveDownloadError::Download(url.into(), e))?;
+        .map_err(|e| ArchiveDownloadError::Download(url.into(), Box::new(e)))?;
     let mut archive = Vec::new();
-    response
-        .into_reader()
-        .read_to_end(&mut archive)
-        .map_err(|e| ArchiveDownloadError::Read(e))?;
+    response.into_reader().read_to_end(&mut archive).map_err(ArchiveDownloadError::Read)?;
     Ok(archive)
 }
 
@@ -96,19 +93,19 @@ impl ApiClient {
         }
     }
 
-    pub fn get<'a, P>(&self, path: &str, params: P) -> Result<ureq::Response, ureq::Error>
+    pub fn get<'a, P>(&self, path: &str, params: P) -> Result<ureq::Response, Box<ureq::Error>>
     where
         P: IntoIterator<Item = (&'a str, &'a str)>,
     {
         self.wait_for_token();
-        self.inner.client.get(&self.build_url(path)).query_pairs(params).call()
+        self.inner.client.get(&self.build_url(path)).query_pairs(params).call().map_err(Box::new)
     }
 
-    pub fn post_json<T>(&self, path: &str, body: T) -> Result<ureq::Response, ureq::Error>
+    pub fn post_json<T>(&self, path: &str, body: T) -> Result<ureq::Response, Box<ureq::Error>>
     where
         T: serde::ser::Serialize,
     {
         self.wait_for_token();
-        self.inner.client.post(&self.build_url(path)).send_json(body)
+        self.inner.client.post(&self.build_url(path)).send_json(body).map_err(Box::new)
     }
 }

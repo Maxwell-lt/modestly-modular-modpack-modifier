@@ -20,12 +20,21 @@ impl ModrinthClient {
     }
 
     pub fn get_mod_info(&self, id_or_slug: &str) -> Option<Project> {
-        self.client.get(&format!("/project/{id_or_slug}"), vec![]).ok().and_then(|r| r.into_json().ok())
+        self.client
+            .get(&format!("/project/{id_or_slug}"), vec![])
+            .ok()
+            .and_then(|r| r.into_json().ok())
+    }
+}
+
+impl Default for ModrinthClient {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 mod model {
-use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Project {
