@@ -87,10 +87,20 @@ impl ApiClient {
         format!("{}{}", self.inner.base_url, path)
     }
 
+    /// Wait for ratelimiter to allow an API call.
+    ///
+    /// Must be called before every use of the [`Agent`]
+    fn wait_for_token(&self) {
+        while let Err(duration) = self.inner.ratelimit.try_wait() {
+            std::thread::sleep(duration);
+        }
+    }
+
     pub fn get<'a, P>(&self, path: &str, params: P) -> Result<ureq::Response, ureq::Error>
     where
         P: IntoIterator<Item = (&'a str, &'a str)>,
     {
+        self.wait_for_token();
         self.inner.client.get(&self.build_url(path)).query_pairs(params).call()
     }
 
@@ -98,6 +108,7 @@ impl ApiClient {
     where
         T: serde::ser::Serialize,
     {
-        self.inner.client.post(&format!("{}{}", &self.inner.base_url, path)).send_json(body)
+        self.wait_for_token();
+        self.inner.client.post(&self.build_url(path)).send_json(body)
     }
 }
