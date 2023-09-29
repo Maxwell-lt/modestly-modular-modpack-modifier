@@ -1,3 +1,5 @@
+use crate::common::ApiError;
+
 use self::model::{Project, Version};
 
 use super::common::{ApiClient, ApiClientBuilder};
@@ -44,18 +46,19 @@ impl ModrinthClient {
     /// Get mod info from Modrinth, given either a project slug or base-62 numeric ID.
     ///
     /// Endpoint: /project/{id|slug}
-    pub fn get_mod_info(&self, id_or_slug: &str) -> Option<Project> {
+    pub fn get_mod_info(&self, id_or_slug: &str) -> Result<Project, ApiError> {
         self.client
             .get(&format!("/project/{id_or_slug}"), vec![])
-            .ok()
-            .and_then(|r| r.into_json().ok())
+            .map_err(ApiError::Request)?
+            .into_json()
+            .map_err(ApiError::JsonDeserialize)
     }
 
     /// Get version list of a mod from Modrinth, given either a project slug or base-62 numeric ID.
     /// Can optionally filter by mod loader and game version.
     ///
     /// Endpoint: /project/{id|slug}/versions
-    pub fn get_mod_versions(&self, id_or_slug: &str, loaders: Option<&[&str]>, game_versions: Option<&[&str]>) -> Option<Vec<Version>> {
+    pub fn get_mod_versions(&self, id_or_slug: &str, loaders: Option<&[&str]>, game_versions: Option<&[&str]>) -> Result<Vec<Version>, ApiError> {
         let mut params = vec![];
         if let Some(l) = format_params(loaders) {
             println!("Adding loaders");
@@ -74,26 +77,20 @@ impl ModrinthClient {
                     .map(|&(x, ref y)| (x, &y[..]))
                     .collect::<Vec<_>>(),
             )
-            .map_err(|e| {
-                println!("{e:?}");
-                e
-            })
-            .ok()
-            .and_then(|r| {
-                r.into_json()
-                    .map_err(|e| {
-                        println!("{e:?}");
-                        e
-                    })
-                    .ok()
-            })
+            .map_err(ApiError::Request)?
+            .into_json()
+            .map_err(ApiError::JsonDeserialize)
     }
 
     /// Get single version from Modrinth, given its base-62 numeric ID.
     ///
     /// Endpoint: /version/{id}
-    pub fn get_version(&self, id: &str) -> Option<Version> {
-        self.client.get(&format!("/version/{id}"), vec![]).ok().and_then(|r| r.into_json().ok())
+    pub fn get_version(&self, id: &str) -> Result<Version, ApiError> {
+        self.client
+            .get(&format!("/version/{id}"), vec![])
+            .map_err(ApiError::Request)?
+            .into_json()
+            .map_err(ApiError::JsonDeserialize)
     }
 }
 
@@ -190,7 +187,12 @@ mod tests {
     fn mod_info_404() {
         let client = ModrinthClient::new();
         let project = client.get_mod_info("this-mod-does-not-exist-abcdefg");
-        assert!(project.is_none());
+        let err = project.unwrap_err();
+        if let ApiError::Request(request_error) = err {
+            assert_eq!(request_error.into_response().unwrap().status(), 404);
+        } else {
+            assert!(false, "Expected error from API request");
+        }
     }
 
     #[test]

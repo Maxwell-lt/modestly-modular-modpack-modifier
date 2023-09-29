@@ -14,6 +14,18 @@ pub enum ArchiveDownloadError {
     Read(std::io::Error),
 }
 
+#[derive(Error, Debug)]
+pub enum ApiError {
+    #[error("Failed to deserialize JSON response. Error: {0}")]
+    JsonDeserialize(std::io::Error),
+    #[error("Request failed. Error: {0}")]
+    Request(Box<ureq::Error>),
+    #[error("Expected pagination info in response was missing.")]
+    Pagination,
+    #[error("No data returned from request.")]
+    Empty,
+}
+
 pub fn download_archive(url: &str) -> Result<Vec<u8>, ArchiveDownloadError> {
     let response = ureq::get(url)
         .set("User-Agent", USER_AGENT)
