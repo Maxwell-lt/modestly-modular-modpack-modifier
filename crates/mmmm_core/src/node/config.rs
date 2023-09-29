@@ -86,6 +86,12 @@ pub enum ModDefinition {
         #[serde(flatten)]
         fields: ModDefinitionFields,
     },
+    Url {
+        location: String,
+        filename: Option<String>,
+        #[serde(flatten)]
+        fields: ModDefinitionFields,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -142,6 +148,9 @@ mod tests {
     default: true
   - name: waystones
     source: curse
+  - name: patchouli
+    source: url
+    location: 'https://github.com/VazkiiMods/Patchouli/releases/download/release-1.20.1-81/Patchouli-1.20.1-81-FORGE.jar'
 - id: download
   kind: ArchiveDownloaderNode
   input:
@@ -195,6 +204,16 @@ mod tests {
                         file_id: None,
                         fields: ModDefinitionFields {
                             name: "waystones".into(),
+                            side: Side::Both,
+                            required: None,
+                            default: None,
+                        },
+                    },
+                    ModDefinition::Url {
+                        location: "https://github.com/VazkiiMods/Patchouli/releases/download/release-1.20.1-81/Patchouli-1.20.1-81-FORGE.jar".into(),
+                        filename: None,
+                        fields: ModDefinitionFields {
+                            name: "patchouli".into(),
                             side: Side::Both,
                             required: None,
                             default: None,
