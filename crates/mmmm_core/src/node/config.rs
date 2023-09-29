@@ -39,6 +39,7 @@ pub enum SourceValue {
     Text(String),
     Number(i64),
     List(Vec<String>),
+    Mods(Vec<ModDefinition>),
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -69,6 +70,42 @@ pub enum NodeConfigEntry {
     Output(OutputDefinition),
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(tag = "source")]
+#[serde(rename_all = "lowercase")]
+pub enum ModDefinition {
+    Modrinth {
+        id: Option<String>,
+        file_id: Option<String>,
+        #[serde(flatten)]
+        fields: ModDefinitionFields,
+    },
+    Curse {
+        id: Option<u32>,
+        file_id: Option<u32>,
+        #[serde(flatten)]
+        fields: ModDefinitionFields,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct ModDefinitionFields {
+    name: String,
+    #[serde(default)]
+    side: Side,
+    required: Option<bool>,
+    default: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    Client,
+    Server,
+    #[default]
+    Both,
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -87,6 +124,24 @@ mod tests {
   - resource-packs/**
 - id: number
   value: 65536
+- id: mods
+  value:
+  - name: appleskin
+    source: modrinth
+    id: EsAfCjCV
+    file_id: pyRMqaEV
+    side: both
+    required: true
+    default: true
+  - name: mouse-tweaks
+    source: curse
+    id: 60089
+    file_id: 4581240
+    side: client
+    required: false
+    default: true
+  - name: waystones
+    source: curse
 - id: download
   kind: ArchiveDownloaderNode
   input:
@@ -111,6 +166,41 @@ mod tests {
             NodeConfigEntry::Source(SourceDefinition {
                 id: "number".into(),
                 value: SourceValue::Number((65536).into()),
+            }),
+            NodeConfigEntry::Source(SourceDefinition {
+                id: "mods".into(),
+                value: SourceValue::Mods(vec![
+                    ModDefinition::Modrinth {
+                        id: Some("EsAfCjCV".into()),
+                        file_id: Some("pyRMqaEV".into()),
+                        fields: ModDefinitionFields {
+                            name: "appleskin".into(),
+                            side: Side::Both,
+                            required: Some(true),
+                            default: Some(true),
+                        },
+                    },
+                    ModDefinition::Curse {
+                        id: Some(60089),
+                        file_id: Some(4581240),
+                        fields: ModDefinitionFields {
+                            name: "mouse-tweaks".into(),
+                            side: Side::Client,
+                            required: Some(false),
+                            default: Some(true),
+                        },
+                    },
+                    ModDefinition::Curse {
+                        id: None,
+                        file_id: None,
+                        fields: ModDefinitionFields {
+                            name: "waystones".into(),
+                            side: Side::Both,
+                            required: None,
+                            default: None,
+                        },
+                    },
+                ]),
             }),
             NodeConfigEntry::Node(NodeDefinition {
                 kind: NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode),
