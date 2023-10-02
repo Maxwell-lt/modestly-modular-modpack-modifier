@@ -57,11 +57,9 @@ impl ModrinthClient {
     pub fn get_mod_versions(&self, id_or_slug: &str, loaders: Option<&[&str]>, game_versions: Option<&[&str]>) -> Result<Vec<Version>, ApiError> {
         let mut params = vec![];
         if let Some(l) = format_params(loaders) {
-            println!("Adding loaders");
             params.push(("loaders", l));
         }
         if let Some(g) = format_params(game_versions) {
-            println!("Adding game_version");
             params.push(("game_versions", g));
         }
         Ok(self
