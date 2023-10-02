@@ -6,11 +6,11 @@ use std::{
 use serde::Deserialize;
 use tokio::sync::broadcast::{channel, Receiver};
 
-use crate::di::container::{ChannelId, DiContainer, InputType, OutputType};
+use crate::di::container::{DiContainer, InputType, OutputType};
 
 use super::{
-    config::{NodeConfig, NodeInitError},
-    utils::{get_input, get_output, log_err},
+    config::{ChannelId, NodeConfig, NodeInitError},
+    utils::{get_input, get_output, log_err, log_send_err},
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -49,7 +49,7 @@ impl NodeConfig for DirectoryMerger {
                 &logger,
                 &node_id,
             );
-            log_err(output_channel.send(output_dir), &logger, &node_id);
+            log_send_err(output_channel.send(output_dir), &logger, &node_id, "default");
         }))
     }
 
@@ -63,8 +63,12 @@ mod tests {
     use std::{str::FromStr, time::Duration};
 
     use crate::{
+        di::container::DiContainerBuilder,
         file::{filepath::FilePath, filestore::FileStore, filetree::FileTree},
-        node::{config::NodeConfigTypes, utils::read_channel},
+        node::{
+            config::NodeConfigTypes,
+            utils::{get_output_test, read_channel},
+        },
     };
 
     use super::*;
@@ -84,13 +88,15 @@ mod tests {
         tree3.add_file(FilePath::from_str("file.json").unwrap(), "jkl".into());
 
         let node = NodeConfigTypes::DirectoryMerger(DirectoryMerger);
-        let mut channels = node.generate_channels(node_id);
         let c1 = tokio::sync::broadcast::channel::<FileTree>(1).0;
         let c2 = tokio::sync::broadcast::channel::<FileTree>(1).0;
         let c3 = tokio::sync::broadcast::channel::<FileTree>(1).0;
-        channels.insert(ChannelId::from_str("tree1").unwrap(), InputType::Files(c1.clone()));
-        channels.insert(ChannelId::from_str("tree2").unwrap(), InputType::Files(c2.clone()));
-        channels.insert(ChannelId::from_str("tree3").unwrap(), InputType::Files(c3.clone()));
+        let mut ctx = DiContainerBuilder::default()
+            .channel_from_node(&node, node_id)
+            .channel(ChannelId::from_str("tree1").unwrap(), InputType::Files(c1.clone()))
+            .channel(ChannelId::from_str("tree2").unwrap(), InputType::Files(c2.clone()))
+            .channel(ChannelId::from_str("tree3").unwrap(), InputType::Files(c3.clone()))
+            .build();
 
         let input_ids = HashMap::from([
             ("1".into(), ChannelId::from_str("tree1").unwrap()),
@@ -98,11 +104,7 @@ mod tests {
             ("3".into(), ChannelId::from_str("tree3").unwrap()),
         ]);
 
-        let ctx = DiContainer::new(HashMap::new(), channels);
-        let mut out = match ctx.get_receiver(&ChannelId::from_str(node_id).unwrap()).unwrap() {
-            OutputType::Files(c) => c,
-            _ => panic!(),
-        };
+        let mut out = get_output_test!(&ChannelId::from_str(node_id).unwrap(), Files, ctx);
 
         node.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
 

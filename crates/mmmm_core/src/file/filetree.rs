@@ -6,7 +6,7 @@ use std::u128;
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
-pub(crate) struct FileTree {
+pub struct FileTree {
     // Should contents use String or FilePath as a key? String is *probably* cheaper (as FilePath
     // owns several strings internally), but FilePath as a key allows stronger guarantees on valid
     // paths.
@@ -15,19 +15,19 @@ pub(crate) struct FileTree {
 }
 
 impl FileTree {
-    pub(crate) fn new(store: FileStore) -> FileTree {
+    pub fn new(store: FileStore) -> FileTree {
         FileTree {
             contents: HashMap::new(),
             store,
         }
     }
 
-    pub(crate) fn add_file(&mut self, path: FilePath, file: Vec<u8>) {
+    pub fn add_file(&mut self, path: FilePath, file: Vec<u8>) {
         let hash = self.store.write_file(file);
         self.contents.insert(path, hash);
     }
 
-    pub(crate) fn get_file(&self, path: &FilePath) -> Option<Arc<Vec<u8>>> {
+    pub fn get_file(&self, path: &FilePath) -> Option<Arc<Vec<u8>>> {
         if let Some(hash) = self.contents.get(path) {
             if let Some(file) = self.store.get_file(*hash) {
                 return Some(file);
@@ -39,11 +39,11 @@ impl FileTree {
     /// Delete a filepath from the filetree.
     ///
     /// Idempotent.
-    pub(crate) fn delete_file(&mut self, path: &FilePath) {
+    pub fn delete_file(&mut self, path: &FilePath) {
         self.contents.remove(path);
     }
 
-    pub(crate) fn copy_file(&mut self, from: &FilePath, to: &FilePath) -> Result<(), FileTreeError> {
+    pub fn copy_file(&mut self, from: &FilePath, to: &FilePath) -> Result<(), FileTreeError> {
         match self.contents.get(from) {
             Some(hash) => {
                 self.contents.insert(to.clone(), *hash);
@@ -53,19 +53,19 @@ impl FileTree {
         }
     }
 
-    pub(crate) fn move_file(&mut self, from: &FilePath, to: &FilePath) -> Result<(), FileTreeError> {
+    pub fn move_file(&mut self, from: &FilePath, to: &FilePath) -> Result<(), FileTreeError> {
         self.copy_file(from, to)?;
         self.delete_file(from);
         Ok(())
     }
 
-    pub(crate) fn list_files(&self) -> HashSet<&FilePath> {
+    pub fn list_files(&self) -> HashSet<&FilePath> {
         self.contents.keys().collect()
     }
 
     /// Splits files into two cloned [`FileTree`] objects based on whether they match the provided
     /// filters. The first returned value contains the files that match the filters.
-    pub(crate) fn filter_files<T: AsRef<str>>(&self, filters: &[T]) -> (FileTree, FileTree) {
+    pub fn filter_files<T: AsRef<str>>(&self, filters: &[T]) -> (FileTree, FileTree) {
         let (matched, inverse) = self
             .contents
             .iter()
@@ -88,7 +88,7 @@ impl FileTree {
     /// over. Otherwise, the file data are copied them into this [`FileTree`]'s underlying [`FileStore`].
     /// Files in the consumed [`FileTree`] will overwrite files in this one with identical
     /// [`FilePath`]s.
-    pub(crate) fn add_all(&mut self, other: FileTree) {
+    pub fn add_all(&mut self, other: FileTree) {
         match self.store == other.store {
             true => {
                 self.contents.extend(other.contents);

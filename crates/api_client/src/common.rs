@@ -1,39 +1,46 @@
 use std::{sync::Arc, time::Duration};
 
+use lazy_static::lazy_static;
 use ratelimit::Ratelimiter;
 use thiserror::Error;
 use ureq::{Agent, AgentBuilder, Middleware};
 
 pub const USER_AGENT: &str = const_format::formatcp!("modestly-modular-modpack-modifier/{} ureq", env!("CARGO_PKG_VERSION"));
 
+lazy_static! {
+    static ref AGENT: Agent = AgentBuilder::new().user_agent(USER_AGENT).build();
+}
+
 #[derive(Error, Debug)]
-pub enum ArchiveDownloadError {
-    #[error("Failed to download archive from URL {0}. Error: {1}")]
-    Download(String, Box<ureq::Error>),
-    #[error("Failed to read downloaded archive to bytes. Error: {0}")]
+pub enum DownloadError {
+    #[error("Failed to read response to bytes. Error: {0}")]
     Read(std::io::Error),
+    #[error("Failed to download file from URL {0}. Error: {1}")]
+    Download(String, Box<ureq::Error>),
 }
 
 #[derive(Error, Debug)]
 pub enum ApiError {
     #[error("Failed to deserialize JSON response. Error: {0}")]
-    JsonDeserialize(std::io::Error),
+    JsonDeserialize(#[from] std::io::Error),
     #[error("Request failed. Error: {0}")]
-    Request(Box<ureq::Error>),
+    Request(#[from] Box<ureq::Error>),
     #[error("Expected pagination info in response was missing.")]
     Pagination,
     #[error("No data returned from request.")]
     Empty,
 }
 
-pub fn download_archive(url: &str) -> Result<Vec<u8>, ArchiveDownloadError> {
-    let response = ureq::get(url)
-        .set("User-Agent", USER_AGENT)
+pub fn download_file(url: &str) -> Result<Vec<u8>, DownloadError> {
+    let mut response = Vec::new();
+    AGENT
+        .get(url)
         .call()
-        .map_err(|e| ArchiveDownloadError::Download(url.into(), Box::new(e)))?;
-    let mut archive = Vec::new();
-    response.into_reader().read_to_end(&mut archive).map_err(ArchiveDownloadError::Read)?;
-    Ok(archive)
+        .map_err(|e| DownloadError::Download(url.to_owned(), Box::new(e)))?
+        .into_reader()
+        .read_to_end(&mut response)
+        .map_err(DownloadError::Read)?;
+    Ok(response)
 }
 
 #[derive(Clone)]
@@ -79,7 +86,7 @@ impl ApiClientBuilder {
             .initial_available(self.requests_per_minute)
             .build()
             .unwrap();
-        let client_builder = AgentBuilder::new().user_agent(USER_AGENT).timeout(Duration::from_secs(60));
+        let client_builder = self.agent_builder.timeout(Duration::from_secs(60));
         let client = client_builder.build();
         ApiClient {
             inner: Arc::new(Inner {

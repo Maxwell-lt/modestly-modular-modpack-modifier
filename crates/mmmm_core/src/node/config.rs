@@ -1,13 +1,13 @@
-use std::{collections::HashMap, thread::JoinHandle};
+use std::{collections::HashMap, fmt::Display, str::FromStr, thread::JoinHandle};
 
-use super::{archive_downloader::ArchiveDownloaderNode, dir_merge::DirectoryMerger, file_filter::FileFilterNode};
-use crate::di::container::{ChannelId, DiContainer, InputType};
+use super::{archive_downloader::ArchiveDownloaderNode, dir_merge::DirectoryMerger, file_filter::FileFilterNode, mod_resolver::ModResolver};
+use crate::di::container::{DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
-use serde::Deserialize;
+use serde::{de, Deserialize, Serialize};
 use thiserror::Error;
 
 #[enum_dispatch]
-pub(crate) trait NodeConfig {
+pub trait NodeConfig {
     fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError>;
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType>;
 }
@@ -22,6 +22,14 @@ pub enum NodeInitError {
     MissingInputId(String),
     #[error("Could not find channel in context for id {0:?}!")]
     MissingChannel(ChannelId),
+    #[error("Could not find config value named {0}!")]
+    MissingConfig(String),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct PackDefinition {
+    pub config: HashMap<String, String>,
+    pub nodes: Vec<NodeConfigEntry>,
 }
 
 #[enum_dispatch(NodeConfig)]
@@ -31,6 +39,7 @@ pub enum NodeConfigTypes {
     ArchiveDownloaderNode,
     FileFilterNode,
     DirectoryMerger,
+    ModResolver,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -45,15 +54,15 @@ pub enum SourceValue {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct NodeDefinition {
     #[serde(flatten)]
-    kind: NodeConfigTypes,
-    id: String,
-    input: HashMap<String, ChannelId>,
+    pub kind: NodeConfigTypes,
+    pub id: String,
+    pub input: HashMap<String, ChannelId>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct SourceDefinition {
-    id: String,
-    value: SourceValue,
+    pub id: String,
+    pub value: SourceValue,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -96,20 +105,111 @@ pub enum ModDefinition {
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct ModDefinitionFields {
-    name: String,
+    pub name: String,
     #[serde(default)]
-    side: Side,
-    required: Option<bool>,
-    default: Option<bool>,
+    pub side: Side,
+    pub required: Option<bool>,
+    pub default: Option<bool>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default, Hash, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum Side {
     Client,
     Server,
     #[default]
     Both,
+}
+
+impl Display for Side {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Side::Client => "client",
+                Side::Server => "server",
+                Side::Both => "both",
+            }
+        )
+    }
+}
+
+/// Stores a channel ID by a tuple of (output node name, output name)
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct ChannelId(pub String, pub String);
+
+impl FromStr for ChannelId {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let parts = s.split("::").filter(|p| !p.is_empty()).collect::<Vec<_>>();
+        match parts.len() {
+            2 => Ok(ChannelId(parts[0].to_string(), parts[1].to_string())),
+            1 => Ok(ChannelId(parts[0].to_string(), "default".into())),
+            _ => Err(format!("Tried to parse ChannelId from invalid string: '{}'", s)),
+        }
+    }
+}
+
+// From https://github.com/serde-rs/serde/issues/908
+impl<'de> Deserialize<'de> for ChannelId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(de::Error::custom)
+    }
+}
+
+/// Representation of Nix output format for mods. Several fields have been removed compared to past
+/// implementations of cursetool, as they are not used by the builder.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct ResolvedMod {
+    pub name: String,
+    pub title: String,
+    pub side: Side,
+    pub required: bool,
+    pub default: bool,
+    pub filename: String,
+    pub encoded: String,
+    pub src: String,
+    pub size: u64,
+    pub md5: String,
+    pub sha256: String,
+}
+
+impl Display for ResolvedMod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            r#""{name}" = {{
+                title = "{title}";
+                name = "{name}";
+                side = "{side}";
+                required = "{required}";
+                default = "{default}";
+                filename = "{filename}";
+                encoded = "{encoded}";
+                src = "{src}";
+                size = "{size}";
+                md5 = "{md5}";
+                sha256 = "{sha256}";
+            }};"#,
+            title = self.title,
+            name = self.name,
+            side = self.side,
+            required = self.required,
+            default = self.default,
+            filename = self.filename,
+            encoded = self.encoded,
+            src = self.src,
+            size = self.size,
+            md5 = self.md5,
+            sha256 = self.sha256
+        )
+    }
 }
 
 #[cfg(test)]

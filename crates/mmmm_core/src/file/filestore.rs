@@ -4,12 +4,12 @@ use xxhash_rust::xxh3::xxh3_128;
 
 /// Content-addressed store of byte arrays (files).
 #[derive(Debug, Clone)]
-pub(crate) struct FileStore {
+pub struct FileStore {
     data: Arc<DashMap<u128, Arc<Vec<u8>>>>,
 }
 
 impl FileStore {
-    pub(crate) fn new() -> FileStore {
+    pub fn new() -> FileStore {
         FileStore {
             data: Arc::new(DashMap::new()),
         }
@@ -18,14 +18,14 @@ impl FileStore {
     /// Retrieve file from store by its hash.
     ///
     /// Locks the internal store for reading.
-    pub(crate) fn get_file(&self, hash: u128) -> Option<Arc<Vec<u8>>> {
+    pub fn get_file(&self, hash: u128) -> Option<Arc<Vec<u8>>> {
         self.data.get(&hash).map(|r| r.value().clone())
     }
 
     /// Insert file into the store and get its hash.
     ///
     /// Locks the internal store for writing.
-    pub(crate) fn write_file(&self, file: Vec<u8>) -> u128 {
+    pub fn write_file(&self, file: Vec<u8>) -> u128 {
         let hash = xxh3_128(file.as_slice());
         self.data.insert(hash, Arc::new(file));
         hash
@@ -38,7 +38,7 @@ impl FileStore {
     /// Returns [`None`] if any of the hashes are not found in the store.
     ///
     /// Locks the internal store for reading.
-    pub(crate) fn get_all_files(&self, hashes: &[u128]) -> Option<Vec<Arc<Vec<u8>>>> {
+    pub fn get_all_files(&self, hashes: &[u128]) -> Option<Vec<Arc<Vec<u8>>>> {
         hashes.iter().map(|hash| self.data.get(hash).map(|r| r.value().clone())).collect()
     }
 
@@ -47,7 +47,7 @@ impl FileStore {
     /// The returned array preserves the order of the provided file list.
     ///
     /// Locks the internal store for writing.
-    pub(crate) fn write_all_files(&self, files: Vec<Vec<u8>>) -> Vec<u128> {
+    pub fn write_all_files(&self, files: Vec<Vec<u8>>) -> Vec<u128> {
         let hashes: Vec<u128> = files.iter().map(|f| xxh3_128(f)).collect();
         for (file, hash) in files.into_iter().zip(hashes.iter()) {
             self.data.insert(*hash, Arc::new(file));
@@ -103,7 +103,7 @@ mod tests {
 
         let valid_hash = store.write_file(file);
 
-        let result = store.get_all_files(&vec![valid_hash, 12345678]);
+        let result = store.get_all_files(&[valid_hash, 12345678]);
 
         assert!(result.is_none());
     }

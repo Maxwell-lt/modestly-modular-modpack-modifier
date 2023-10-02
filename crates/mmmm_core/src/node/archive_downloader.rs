@@ -1,11 +1,11 @@
-use super::config::{NodeConfig, NodeInitError};
-use super::utils;
+use super::config::{ChannelId, NodeConfig, NodeInitError};
 use super::utils::log_err;
+use super::utils::{self, log_send_err};
 use crate::{
-    di::container::{ChannelId, DiContainer, InputType, OutputType},
+    di::container::{DiContainer, InputType, OutputType},
     file::{filepath::FilePath, filetree::FileTree},
 };
-use api_client::common::download_archive;
+use api_client::common::download_file;
 use serde::Deserialize;
 use std::io::Cursor;
 use std::{
@@ -32,7 +32,7 @@ impl NodeConfig for ArchiveDownloaderNode {
             log_err(waker.blocking_recv(), &logger, &node_id);
             let url = log_err(in_channel.blocking_recv(), &logger, &node_id);
 
-            let archive = log_err(download_archive(&url), &logger, &node_id);
+            let archive = log_err(download_file(&url), &logger, &node_id);
 
             let mut zip_archive = log_err(ZipArchive::new(Cursor::new(archive)), &logger, &node_id);
             let mut filetree = FileTree::new(fs);
@@ -48,7 +48,7 @@ impl NodeConfig for ArchiveDownloaderNode {
                 }
             }
 
-            log_err(out_channel.send(filetree), &logger, &node_id);
+            log_send_err(out_channel.send(filetree), &logger, &node_id, "default");
         }))
     }
 
@@ -61,11 +61,14 @@ impl NodeConfig for ArchiveDownloaderNode {
 mod tests {
     use crate::{
         di::{
-            container::{ChannelId, InputType},
+            container::{DiContainerBuilder, InputType},
             logger::LogLevel,
         },
         file::{filepath::FilePath, filetree::FileTree},
-        node::{config::NodeConfigTypes, utils::read_channel},
+        node::{
+            config::{ChannelId, NodeConfigTypes},
+            utils::{get_output_test, read_channel},
+        },
     };
     use std::{str::FromStr, time::Duration};
 
@@ -77,18 +80,13 @@ mod tests {
         let url = "https://cdn.modrinth.com/data/p87Jiw2q/versions/tW5eAKWB/LostEra_Modpack_1.6.1.mrpack";
         let url_channel = tokio::sync::broadcast::channel::<String>(1).0;
         let node_id = "archive_downloader_test";
-        let input_ids = HashMap::from([("url".to_string(), ChannelId("test_node".to_string(), "test_output".to_string()))]);
-        let mut container_channels = HashMap::from([(
-            ChannelId("test_node".to_string(), "test_output".to_string()),
-            InputType::Text(url_channel.clone()),
-        )]);
+        let input_ids = HashMap::from([("url".to_string(), ChannelId::from_str("test_node::test_output").unwrap())]);
         let node = NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode);
-        container_channels.extend(node.generate_channels(node_id).into_iter());
-        let ctx = DiContainer::new(HashMap::new(), container_channels);
-        let mut output_rx = match ctx.get_receiver(&ChannelId(node_id.into(), "default".into())).unwrap() {
-            OutputType::Files(c) => c,
-            _ => panic!(),
-        };
+        let mut ctx = DiContainerBuilder::default()
+            .channel(input_ids.get("url").unwrap().clone(), InputType::Text(url_channel.clone()))
+            .channel_from_node(&node, node_id)
+            .build();
+        let mut output_rx = get_output_test!(ChannelId::from_str(node_id).unwrap(), Files, ctx);
         let handle = node.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
 
         // Wake nodes and simulate dependency node(s)

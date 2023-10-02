@@ -3,13 +3,16 @@ use std::{
     thread::{spawn, JoinHandle},
 };
 
-use crate::di::container::{ChannelId, DiContainer, InputType, OutputType};
+use crate::di::container::{DiContainer, InputType, OutputType};
 use serde::Deserialize;
 use tokio::sync::broadcast::channel;
 
-use super::config::{NodeConfig, NodeInitError};
-use super::utils;
 use super::utils::log_err;
+use super::{config::ChannelId, utils};
+use super::{
+    config::{NodeConfig, NodeInitError},
+    utils::log_send_err,
+};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct FileFilterNode;
@@ -31,8 +34,9 @@ impl NodeConfig for FileFilterNode {
             let pattern = log_err(pattern_input_channel.blocking_recv(), &logger, &node_id);
 
             let (output_filetree, inverse_filetree) = source_filetree.filter_files(&pattern);
-            log_err(out_channel.send(output_filetree), &logger, &node_id);
-            log_err(inverse_channel.send(inverse_filetree), &logger, &node_id);
+
+            log_send_err(out_channel.send(output_filetree), &logger, &node_id, "default");
+            log_send_err(inverse_channel.send(inverse_filetree), &logger, &node_id, "inverse");
         }))
     }
 
@@ -49,9 +53,15 @@ mod tests {
     use std::{str::FromStr, time::Duration};
 
     use crate::{
-        di::{container::InputType, logger::LogLevel},
+        di::{
+            container::{DiContainerBuilder, InputType},
+            logger::LogLevel,
+        },
         file::{filepath::FilePath, filetree::FileTree},
-        node::utils::read_channel,
+        node::{
+            config::NodeConfigTypes,
+            utils::{get_output_test, read_channel},
+        },
     };
 
     use super::*;
@@ -62,26 +72,20 @@ mod tests {
         let node_id = "filter_node";
         let file_in_channel = channel::<FileTree>(1).0;
         let filter_in_channel = channel::<Vec<String>>(1).0;
-        let (out_channel, mut rx) = channel::<FileTree>(1);
-        let (inverse_channel, mut inverse_rx) = channel::<FileTree>(1);
-
-        let ctx = DiContainer::new(
-            HashMap::new(),
-            HashMap::from([
-                (
-                    ChannelId("source_filetree".into(), "default".into()),
-                    InputType::Files(file_in_channel.clone()),
-                ),
-                (ChannelId("globs".into(), "default".into()), InputType::List(filter_in_channel.clone())),
-                (ChannelId(node_id.into(), "default".into()), InputType::Files(out_channel)),
-                (ChannelId(node_id.into(), "inverse".into()), InputType::Files(inverse_channel)),
-            ]),
-        );
 
         let channel_ids = HashMap::from([
             ("files".into(), ChannelId("source_filetree".into(), "default".into())),
             ("pattern".into(), ChannelId("globs".into(), "default".into())),
         ]);
+        let node = NodeConfigTypes::FileFilterNode(FileFilterNode);
+        let mut ctx = DiContainerBuilder::default()
+            .channel_from_node(&node, node_id)
+            .channel(channel_ids.get("files").unwrap().clone(), InputType::Files(file_in_channel.clone()))
+            .channel(channel_ids.get("pattern").unwrap().clone(), InputType::List(filter_in_channel.clone()))
+            .build();
+
+        let mut rx = get_output_test!(&ChannelId::from_str(node_id).unwrap(), Files, ctx);
+        let mut inverse_rx = get_output_test!(&ChannelId(node_id.into(), "inverse".into()), Files, ctx);
 
         let mut source_tree = FileTree::new(ctx.get_filestore());
         source_tree.add_file(FilePath::from_str("modrinth.index.json").unwrap(), "{}".into());
@@ -92,7 +96,7 @@ mod tests {
 
         let filters: Vec<String> = vec!["overrides/**".into()];
 
-        let handle = FileFilterNode {}.validate_and_spawn(node_id.into(), channel_ids, &ctx).unwrap();
+        let handle = node.validate_and_spawn(node_id.into(), channel_ids, &ctx).unwrap();
 
         file_in_channel.send(source_tree).unwrap();
         filter_in_channel.send(filters).unwrap();

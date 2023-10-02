@@ -47,11 +47,7 @@ impl ModrinthClient {
     ///
     /// Endpoint: /project/{id|slug}
     pub fn get_mod_info(&self, id_or_slug: &str) -> Result<Project, ApiError> {
-        self.client
-            .get(&format!("/project/{id_or_slug}"), vec![])
-            .map_err(ApiError::Request)?
-            .into_json()
-            .map_err(ApiError::JsonDeserialize)
+        Ok(self.client.get(&format!("/project/{id_or_slug}"), vec![])?.into_json()?)
     }
 
     /// Get version list of a mod from Modrinth, given either a project slug or base-62 numeric ID.
@@ -68,7 +64,8 @@ impl ModrinthClient {
             println!("Adding game_version");
             params.push(("game_versions", g));
         }
-        self.client
+        Ok(self
+            .client
             .get(
                 &format!("/project/{id_or_slug}/version"),
                 params
@@ -76,21 +73,15 @@ impl ModrinthClient {
                     // Convert a Vec<(&str, String)> to a Vec<(&str, &str)> to match ureq's API
                     .map(|&(x, ref y)| (x, &y[..]))
                     .collect::<Vec<_>>(),
-            )
-            .map_err(ApiError::Request)?
-            .into_json()
-            .map_err(ApiError::JsonDeserialize)
+            )?
+            .into_json()?)
     }
 
     /// Get single version from Modrinth, given its base-62 numeric ID.
     ///
     /// Endpoint: /version/{id}
     pub fn get_version(&self, id: &str) -> Result<Version, ApiError> {
-        self.client
-            .get(&format!("/version/{id}"), vec![])
-            .map_err(ApiError::Request)?
-            .into_json()
-            .map_err(ApiError::JsonDeserialize)
+        Ok(self.client.get(&format!("/version/{id}"), vec![])?.into_json()?)
     }
 }
 
@@ -139,6 +130,7 @@ pub mod model {
         pub id: String,
         pub project_id: String,
         pub files: Vec<VersionFile>,
+        pub date_published: String,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -191,7 +183,7 @@ mod tests {
         if let ApiError::Request(request_error) = err {
             assert_eq!(request_error.into_response().unwrap().status(), 404);
         } else {
-            assert!(false, "Expected error from API request");
+            panic!("Expected error from API request");
         }
     }
 
@@ -202,8 +194,7 @@ mod tests {
         assert_eq!(
             versions
                 .iter()
-                .filter(|v| v.game_versions.iter().any(|v| v == "1.12.2"))
-                .next()
+                .find(|v| v.game_versions.iter().any(|v| v == "1.12.2"))
                 .unwrap()
                 .version_number,
             "1.0.14+mc1.12"

@@ -5,18 +5,18 @@ use std::{path::Path, str::FromStr};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Eq)]
-pub(crate) struct FilePath {
+pub struct FilePath {
     dirs: Vec<String>,
     name: String,
     cached_path: String,
 }
 
 impl FilePath {
-    pub(crate) fn get_filename(&self) -> &str {
+    pub fn get_filename(&self) -> &str {
         &self.name
     }
 
-    pub(crate) fn get_components(&self) -> Vec<String> {
+    pub fn get_components(&self) -> Vec<String> {
         self.dirs
             .iter()
             .chain(std::iter::once(&self.name))
@@ -24,7 +24,7 @@ impl FilePath {
             .collect::<Vec<String>>()
     }
 
-    pub(crate) fn glob_match<T: AsRef<str>>(&self, patterns: &[T]) -> bool {
+    pub fn glob_match<T: AsRef<str>>(&self, patterns: &[T]) -> bool {
         patterns.iter().any(|pattern| glob_match(pattern.as_ref(), &self.cached_path))
     }
 }

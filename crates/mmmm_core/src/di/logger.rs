@@ -23,7 +23,7 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Logger {
             logs: Arc::new(boxcar::Vec::new()),
         }
