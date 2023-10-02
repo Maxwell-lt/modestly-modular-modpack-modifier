@@ -647,6 +647,7 @@ dependencies = [
  "boxcar",
  "chrono",
  "dashmap",
+ "digest",
  "enum_dispatch",
  "glob-match",
  "md-5",

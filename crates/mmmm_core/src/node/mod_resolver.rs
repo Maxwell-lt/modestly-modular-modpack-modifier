@@ -9,9 +9,10 @@ use api_client::{
     curse::{model::HashAlgo, CurseClient},
     modrinth::ModrinthClient,
 };
+use digest::Digest;
 use md5::Md5;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use thiserror::Error;
 use tokio::sync::broadcast::channel;
 
@@ -161,19 +162,11 @@ fn resolve_curse(
         (mod_response, file_response, file_data)
     };
 
-    let sha256hash = {
-        let mut hasher = Sha256::new();
-        hasher.update(&file_data);
-        format!("{:x}", hasher.finalize())
-    };
+    let sha256hash = sha256hash(&file_data);
     let md5hash = {
         match file_response.hashes.into_iter().find(|h| h.algo == HashAlgo::Md5) {
             Some(hash) => hash.value,
-            None => {
-                let mut hasher = Md5::new();
-                hasher.update(&file_data);
-                format!("{:x}", hasher.finalize())
-            },
+            None => md5hash(&file_data),
         }
     };
     Ok(ResolvedMod {
@@ -236,16 +229,8 @@ fn resolve_modrinth(
         .or_else(|| file_response.files.first())
         .ok_or_else(|| ResolveError::EmptyOption("getting primary or first file from Modrinth version by ID response".to_owned()))?;
     let file_data = download_file(&primary_file.url)?;
-    let sha256hash = {
-        let mut hasher = Sha256::new();
-        hasher.update(&file_data);
-        format!("{:x}", hasher.finalize())
-    };
-    let md5hash = {
-        let mut hasher = Md5::new();
-        hasher.update(&file_data);
-        format!("{:x}", hasher.finalize())
-    };
+    let sha256hash = sha256hash(&file_data);
+    let md5hash = md5hash(&file_data);
     Ok(ResolvedMod {
         name: mod_response.slug,
         title: mod_response.title,
@@ -262,7 +247,57 @@ fn resolve_modrinth(
 }
 
 fn resolve_url(location: String, filename: Option<String>, meta: ModDefinitionFields) -> Result<ResolvedMod, ResolveError> {
-    todo!()
+    let file_data = download_file(&location)?;
+    let resolved_filename = match filename {
+        Some(value) => value,
+        None => get_filename(&location)?,
+    };
+    let md5hash = md5hash(&file_data);
+    let sha256hash = sha256hash(&file_data);
+    Ok(ResolvedMod {
+        name: meta.name.clone(),
+        title: meta.name,
+        side: meta.side,
+        required: meta.required.unwrap_or(true),
+        default: meta.default.unwrap_or(true),
+        filename: resolved_filename.clone(),
+        encoded: resolved_filename,
+        src: location,
+        size: file_data.len() as u64,
+        md5: md5hash,
+        sha256: sha256hash,
+    })
+}
+
+fn sha256hash<T>(data: T) -> String
+where
+    T: AsRef<[u8]>,
+{
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
+}
+fn md5hash<T>(data: T) -> String
+where
+    T: AsRef<[u8]>,
+{
+    let mut hasher = Md5::new();
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
+}
+
+fn get_filename(url: &str) -> Result<String, ResolveError> {
+    url.split('/')
+        .last()
+        .ok_or_else(|| {
+            ResolveError::EmptyOption(format!(
+                "getting last part of URL after splitting on / when resolving filename. URL: {url}"
+            ))
+        })?
+        .split('?')
+        .next()
+        .map(|s| s.to_string())
+        .ok_or_else(|| ResolveError::EmptyOption(format!("trimming query params off URL if present to resolve filename. URL: {url}")))
 }
 
 #[cfg(test)]
@@ -310,6 +345,11 @@ mod tests {
 - name: mouse-tweaks
   source: curse
   side: client
+- name: title-changer
+  source: url
+  location: https://github.com/Maxwell-lt/TitleChanger/releases/download/1.1.3/titlechanger-1.1.3.jar
+  side: client
+  required: false
         "#,
         )
         .unwrap();
@@ -358,12 +398,37 @@ mod tests {
       md5 = "a6034d3ff57091c78405e46f1f926282";
       sha256 = "5e13315f4e0d0c96b1f9b800a42fecb89f519aca81d556c91df617c8751aa575";
     };
+    "title-changer" = {
+      title = "title-changer";
+      name = "title-changer";
+      side = "client";
+      required = "false";
+      default = "true";
+      filename = "titlechanger-1.1.3.jar";
+      encoded = "titlechanger-1.1.3.jar";
+      src = "https://github.com/Maxwell-lt/TitleChanger/releases/download/1.1.3/titlechanger-1.1.3.jar";
+      size = "5923";
+      md5 = "8fda92da93d78919cff1139e847d3e1c";
+      sha256 = "78bbe270f2f2ca443a4e794ee1f0c5920ef933ce1030bae0dcff45cb16689eb7";
+    };
   };
 }
 "#;
         assert_eq!(
             expected,
             std::str::from_utf8(&output.get_file(&FilePath::from_str("manifest.nix").unwrap()).unwrap()).unwrap()
+        );
+    }
+
+    #[test]
+    fn parse_filename_from_url() {
+        assert_eq!(
+            get_filename("https://github.com/Maxwell-lt/TitleChanger/releases/download/1.1.3/titlechanger-1.1.3.jar").unwrap(),
+            "titlechanger-1.1.3.jar"
+        );
+        assert_eq!(
+            get_filename("https://github.com/Maxwell-lt/TitleChanger/releases/download/1.1.3/titlechanger-1.1.3.jar?query=param").unwrap(),
+            "titlechanger-1.1.3.jar"
         );
     }
 }
