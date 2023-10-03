@@ -8,7 +8,8 @@ use thiserror::Error;
 
 #[enum_dispatch]
 pub trait NodeConfig {
-    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError>;
+    fn validate_and_spawn(&self, node_id: String, input_ids: &HashMap<String, ChannelId>, ctx: &DiContainer)
+        -> Result<JoinHandle<()>, NodeInitError>;
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType>;
 }
 
@@ -46,7 +47,6 @@ pub enum NodeConfigTypes {
 #[serde(untagged)]
 pub enum SourceValue {
     Text(String),
-    Number(i64),
     List(Vec<String>),
     Mods(Vec<ModDefinition>),
 }
@@ -67,8 +67,8 @@ pub struct SourceDefinition {
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct OutputDefinition {
-    filename: String,
-    source: ChannelId,
+    pub filename: String,
+    pub source: ChannelId,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -228,8 +228,6 @@ mod tests {
   - overrides/**
   - modrinth.index.json
   - resource-packs/**
-- id: number
-  value: 65536
 - id: mods
   value:
   - name: appleskin
@@ -271,10 +269,6 @@ mod tests {
             NodeConfigEntry::Source(SourceDefinition {
                 id: "filter-pattern".into(),
                 value: SourceValue::List(vec!["overrides/**".into(), "modrinth.index.json".into(), "resource-packs/**".into()]),
-            }),
-            NodeConfigEntry::Source(SourceDefinition {
-                id: "number".into(),
-                value: SourceValue::Number((65536).into()),
             }),
             NodeConfigEntry::Source(SourceDefinition {
                 id: "mods".into(),

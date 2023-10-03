@@ -68,7 +68,7 @@ where
 }
 
 #[cfg(test)]
-mod test_only {
+pub mod test_only {
     use std::io::Read;
     use std::thread::sleep;
     use std::time::{Duration, Instant};

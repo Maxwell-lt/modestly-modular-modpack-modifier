@@ -32,7 +32,8 @@ pub struct DiContainer {
     // so messages sent from the paired [`broadcast::Sender`]
     // by nodes that take no inputs would not be sent to nodes yet to
     // be initialized if it began processing post-init.
-    waker: broadcast::Sender<()>,
+    // Passing false through the waker channel will abort all nodes, passing true will start them.
+    waker: broadcast::Sender<bool>,
     waker_called: bool,
     // Log messages
     logs: Logger,
@@ -77,8 +78,8 @@ pub enum OutputType {
 #[derive(Error, Debug)]
 pub enum WakeError {
     #[error("Node start failed, have any nodes been spawned? Error: {0}")]
-    Send(SendError<()>),
-    #[error("Nodes have already been started.")]
+    Send(SendError<bool>),
+    #[error("Nodes have already been started or cancelled.")]
     AlreadyAwake,
 }
 
@@ -101,7 +102,7 @@ impl DiContainer {
     /// Get the waker channel. This channel is intended to be used to synchronize nodes starting.
     /// Each node must wait for a message to be sent to this channel before attempting to receive
     /// inputs from data channels.
-    pub fn get_waker(&self) -> broadcast::Receiver<()> {
+    pub fn get_waker(&self) -> broadcast::Receiver<bool> {
         self.waker.subscribe()
     }
 
@@ -113,7 +114,21 @@ impl DiContainer {
         if self.waker_called {
             Err(WakeError::AlreadyAwake)
         } else {
-            match self.waker.send(()) {
+            match self.waker.send(true) {
+                Ok(_) => {
+                    self.waker_called = true;
+                    Ok(())
+                },
+                Err(e) => Err(WakeError::Send(e)),
+            }
+        }
+    }
+
+    pub fn cancel(&mut self) -> Result<(), WakeError> {
+        if self.waker_called {
+            Err(WakeError::AlreadyAwake)
+        } else {
+            match self.waker.send(false) {
                 Ok(_) => {
                     self.waker_called = true;
                     Ok(())
@@ -167,9 +182,9 @@ impl DiContainerBuilder {
         self
     }
 
-    /// Adds channels from a node.
-    pub fn channel_from_node(mut self, node_type: &NodeConfigTypes, name: &str) -> Self {
-        self.channels.extend(node_type.generate_channels(name));
+    /// Adds multiple channels sourced from a node.
+    pub fn channel_from_node(mut self, channels: HashMap<ChannelId, InputType>) -> Self {
+        self.channels.extend(channels);
         self
     }
 
@@ -261,7 +276,7 @@ mod tests {
 
         let mut waker_rx = c.get_waker();
         let waker_tx = c.waker.clone();
-        waker_tx.send(()).unwrap();
+        waker_tx.send(true).unwrap();
 
         assert!(waker_rx.try_recv().is_ok());
     }

@@ -21,7 +21,12 @@ const FILES: &str = "files";
 const PATTERN: &str = "pattern";
 
 impl NodeConfig for FileFilterNode {
-    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
+    fn validate_and_spawn(
+        &self,
+        node_id: String,
+        input_ids: &HashMap<String, ChannelId>,
+        ctx: &DiContainer,
+    ) -> Result<JoinHandle<()>, NodeInitError> {
         let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
         let inverse_channel = utils::get_output!(ChannelId(node_id.clone(), "inverse".into()), Files, ctx)?;
         let mut file_input_channel = utils::get_input!(FILES, Files, ctx, input_ids)?;
@@ -29,7 +34,11 @@ impl NodeConfig for FileFilterNode {
         let mut waker = ctx.get_waker();
         let logger = ctx.get_logger();
         Ok(spawn(move || {
-            log_err(waker.blocking_recv(), &logger, &node_id);
+            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
+            if !should_run {
+                panic!()
+            }
+
             let source_filetree = log_err(file_input_channel.blocking_recv(), &logger, &node_id);
             let pattern = log_err(pattern_input_channel.blocking_recv(), &logger, &node_id);
 
@@ -79,7 +88,7 @@ mod tests {
         ]);
         let node = NodeConfigTypes::FileFilterNode(FileFilterNode);
         let mut ctx = DiContainerBuilder::default()
-            .channel_from_node(&node, node_id)
+            .channel_from_node(node.generate_channels(node_id))
             .channel(channel_ids.get("files").unwrap().clone(), InputType::Files(file_in_channel.clone()))
             .channel(channel_ids.get("pattern").unwrap().clone(), InputType::List(filter_in_channel.clone()))
             .build();
@@ -96,7 +105,7 @@ mod tests {
 
         let filters: Vec<String> = vec!["overrides/**".into()];
 
-        let handle = node.validate_and_spawn(node_id.into(), channel_ids, &ctx).unwrap();
+        let handle = node.validate_and_spawn(node_id.into(), &channel_ids, &ctx).unwrap();
 
         file_in_channel.send(source_tree).unwrap();
         filter_in_channel.send(filters).unwrap();

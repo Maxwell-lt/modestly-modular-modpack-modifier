@@ -33,7 +33,12 @@ use super::{
 pub struct ModResolver;
 
 impl NodeConfig for ModResolver {
-    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
+    fn validate_and_spawn(
+        &self,
+        node_id: String,
+        input_ids: &HashMap<String, ChannelId>,
+        ctx: &DiContainer,
+    ) -> Result<JoinHandle<()>, NodeInitError> {
         let mut mod_channel = get_input!("mods", Mods, ctx, input_ids)?;
         let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
 
@@ -51,7 +56,10 @@ impl NodeConfig for ModResolver {
         let curse_client_option = ctx.get_curse_client();
         let modrinth_client = ctx.get_modrinth_client();
         Ok(spawn(move || {
-            log_err(waker.blocking_recv(), &logger, &node_id);
+            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
+            if !should_run {
+                panic!()
+            }
 
             let mods = log_err(mod_channel.blocking_recv(), &logger, &node_id);
 
@@ -191,8 +199,8 @@ fn resolve_curse(
 fn cf_matches_version(file: &api_client::curse::model::File, mcversion: &str, loader: &str) -> bool {
     file.game_versions.iter().any(|v| v == mcversion)
         && match loader.to_lowercase().as_str() {
-            "forge" => !file.game_versions.iter().any(|v| v == "Fabric"),
-            "fabric" => !file.game_versions.iter().any(|v| v == "Forge"),
+            "forge" => file.game_versions.iter().any(|v| v == "Forge") || !file.game_versions.iter().any(|v| v == "Fabric"),
+            "fabric" => file.game_versions.iter().any(|v| v == "Fabric") || !file.game_versions.iter().any(|v| v == "Forge"),
             _ => true,
         }
 }
@@ -330,7 +338,7 @@ mod tests {
             ctx_builder = ctx_builder.curse_client_key(&c.curse_api_key);
         }
         let mut ctx = ctx_builder
-            .channel_from_node(&node, node_id)
+            .channel_from_node(node.generate_channels(node_id))
             .channel(ChannelId::from_str("mod-source").unwrap(), InputType::Mods(mod_channel.clone()))
             .set_config("minecraft_version", "1.12.2")
             .set_config("modloader", "forge")
@@ -358,7 +366,7 @@ mod tests {
             return;
         }
 
-        let handle = node.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
+        let handle = node.validate_and_spawn(node_id.into(), &input_ids, &ctx).unwrap();
 
         ctx.run().unwrap();
         mod_channel.send(mod_config).unwrap();

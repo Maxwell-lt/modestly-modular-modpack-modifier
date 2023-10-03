@@ -22,14 +22,23 @@ pub struct ArchiveDownloaderNode;
 const URL: &str = "url";
 
 impl NodeConfig for ArchiveDownloaderNode {
-    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
+    fn validate_and_spawn(
+        &self,
+        node_id: String,
+        input_ids: &HashMap<String, ChannelId>,
+        ctx: &DiContainer,
+    ) -> Result<JoinHandle<()>, NodeInitError> {
         let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
         let mut in_channel = utils::get_input!(URL, Text, ctx, input_ids)?;
         let fs = ctx.get_filestore();
         let mut waker = ctx.get_waker();
         let logger = ctx.get_logger();
         Ok(spawn(move || {
-            log_err(waker.blocking_recv(), &logger, &node_id);
+            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
+            if !should_run {
+                panic!()
+            }
+
             let url = log_err(in_channel.blocking_recv(), &logger, &node_id);
 
             let archive = log_err(download_file(&url), &logger, &node_id);
@@ -84,10 +93,10 @@ mod tests {
         let node = NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode);
         let mut ctx = DiContainerBuilder::default()
             .channel(input_ids.get("url").unwrap().clone(), InputType::Text(url_channel.clone()))
-            .channel_from_node(&node, node_id)
+            .channel_from_node(node.generate_channels(node_id))
             .build();
         let mut output_rx = get_output_test!(ChannelId::from_str(node_id).unwrap(), Files, ctx);
-        let handle = node.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
+        let handle = node.validate_and_spawn(node_id.into(), &input_ids, &ctx).unwrap();
 
         // Wake nodes and simulate dependency node(s)
         url_channel.send(url.to_string()).unwrap();

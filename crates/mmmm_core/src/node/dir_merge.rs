@@ -17,7 +17,12 @@ use super::{
 pub struct DirectoryMerger;
 
 impl NodeConfig for DirectoryMerger {
-    fn validate_and_spawn(&self, node_id: String, input_ids: HashMap<String, ChannelId>, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
+    fn validate_and_spawn(
+        &self,
+        node_id: String,
+        input_ids: &HashMap<String, ChannelId>,
+        ctx: &DiContainer,
+    ) -> Result<JoinHandle<()>, NodeInitError> {
         // Nothing is stopping us from accepting literally any input names
         // pro: simpler to implement this way
         // con: how do I document to users "just connect these channels to literally any name, just
@@ -36,7 +41,11 @@ impl NodeConfig for DirectoryMerger {
         let logger = ctx.get_logger();
         let mut waker = ctx.get_waker();
         Ok(spawn(move || {
-            log_err(waker.blocking_recv(), &logger, &node_id);
+            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
+            if !should_run {
+                panic!()
+            }
+
             let output_dir = log_err(
                 input_channels
                     .iter_mut()
@@ -92,7 +101,7 @@ mod tests {
         let c2 = tokio::sync::broadcast::channel::<FileTree>(1).0;
         let c3 = tokio::sync::broadcast::channel::<FileTree>(1).0;
         let mut ctx = DiContainerBuilder::default()
-            .channel_from_node(&node, node_id)
+            .channel_from_node(node.generate_channels(node_id))
             .channel(ChannelId::from_str("tree1").unwrap(), InputType::Files(c1.clone()))
             .channel(ChannelId::from_str("tree2").unwrap(), InputType::Files(c2.clone()))
             .channel(ChannelId::from_str("tree3").unwrap(), InputType::Files(c3.clone()))
@@ -106,7 +115,7 @@ mod tests {
 
         let mut out = get_output_test!(&ChannelId::from_str(node_id).unwrap(), Files, ctx);
 
-        node.validate_and_spawn(node_id.into(), input_ids, &ctx).unwrap();
+        node.validate_and_spawn(node_id.into(), &input_ids, &ctx).unwrap();
 
         c1.send(tree1).unwrap();
         c2.send(tree2).unwrap();
