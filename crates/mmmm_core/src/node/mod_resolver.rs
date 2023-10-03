@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    str::FromStr,
     thread::{spawn, JoinHandle},
 };
 
@@ -16,12 +15,9 @@ use sha2::Sha256;
 use thiserror::Error;
 use tokio::sync::broadcast::channel;
 
-use crate::{
-    di::{
-        container::{DiContainer, InputType, OutputType},
-        logger::LogLevel::Panic,
-    },
-    file::{filepath::FilePath, filetree::FileTree},
+use crate::di::{
+    container::{DiContainer, InputType, OutputType},
+    logger::LogLevel::Panic,
 };
 
 use super::{
@@ -40,10 +36,9 @@ impl NodeConfig for ModResolver {
         ctx: &DiContainer,
     ) -> Result<JoinHandle<()>, NodeInitError> {
         let mut mod_channel = get_input!("mods", Mods, ctx, input_ids)?;
-        let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
+        let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Text, ctx)?;
 
         let logger = ctx.get_logger();
-        let filestore = ctx.get_filestore();
         let mut waker = ctx.get_waker();
 
         let minecraft_version = ctx
@@ -114,14 +109,12 @@ impl NodeConfig for ModResolver {
                 mods = resolved.join("\n")
             );
             let nix_file = nixpkgs_fmt::reformat_string(&raw_nix_file);
-            let mut tree = FileTree::new(filestore);
-            tree.add_file(FilePath::from_str("manifest.nix").unwrap(), nix_file.into_bytes());
-            log_send_err(out_channel.send(tree), &logger, &node_id, "default");
+            log_send_err(out_channel.send(nix_file), &logger, &node_id, "default");
         }))
     }
 
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType> {
-        HashMap::from([(ChannelId(node_id.to_owned(), "default".into()), InputType::Files(channel(1).0))])
+        HashMap::from([(ChannelId(node_id.to_owned(), "default".into()), InputType::Text(channel(1).0))])
     }
 }
 
@@ -316,7 +309,6 @@ mod tests {
 
     use crate::{
         di::container::DiContainerBuilder,
-        file::filetree::FileTree,
         node::{
             config::{ModDefinition, NodeConfigTypes},
             utils::{get_curse_config, get_output_test, read_channel},
@@ -344,7 +336,7 @@ mod tests {
             .set_config("modloader", "forge")
             .build();
 
-        let mut out_channel = get_output_test!(ChannelId::from_str("resolver").unwrap(), Files, ctx);
+        let mut out_channel = get_output_test!(ChannelId::from_str("resolver").unwrap(), Text, ctx);
 
         let mod_config: Vec<ModDefinition> = serde_yaml::from_str(
             r#"---
@@ -374,7 +366,7 @@ mod tests {
         handle.join().unwrap();
 
         let timeout = Duration::from_secs(30);
-        let output: FileTree = read_channel(&mut out_channel, timeout).unwrap();
+        let output: String = read_channel(&mut out_channel, timeout).unwrap();
 
         let expected = r#"{
   version = "1.12.2";
@@ -422,10 +414,7 @@ mod tests {
   };
 }
 "#;
-        assert_eq!(
-            expected,
-            std::str::from_utf8(&output.get_file(&FilePath::from_str("manifest.nix").unwrap()).unwrap()).unwrap()
-        );
+        assert_eq!(expected, output);
     }
 
     #[test]

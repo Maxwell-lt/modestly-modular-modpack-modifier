@@ -117,9 +117,9 @@ pub fn build_graph(pack_definition: &str, global_config: MMMMConfig) -> Result<G
 
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, time::Duration};
+    use std::{time::Duration};
 
-    use crate::{file::filepath::FilePath, node::utils::read_channel};
+    use crate::{node::utils::read_channel};
 
     use super::*;
 
@@ -157,7 +157,7 @@ nodes:
     kind: ModResolver
     input:
       mods: 'modlist'
-  - filename: manifest.zip
+  - filename: manifest.nix
     source: 'resolver::default'
 ..."#;
         let global_config = MMMMConfig {
@@ -167,17 +167,13 @@ nodes:
         let mut graph = build_graph(mod_config, global_config).unwrap();
         graph.context.run().unwrap();
 
-        let manifest_channel = if let OutputType::Files(channel) = graph.outputs.get_mut("manifest.zip").unwrap() {
+        let manifest_channel = if let OutputType::Text(channel) = graph.outputs.get_mut("manifest.nix").unwrap() {
             channel
         } else {
             panic!()
         };
         let timeout = Duration::from_secs(10);
-        let manifest_tree = read_channel(manifest_channel, timeout).unwrap();
-        let manifest_file = std::str::from_utf8(&manifest_tree.get_file(&FilePath::from_str("manifest.nix").unwrap()).unwrap())
-            .unwrap()
-            .to_string();
-        println!("{}", manifest_file);
+        let manifest_file = read_channel(manifest_channel, timeout).unwrap();
         let expected = r#"{
   version = "1.20.2";
   imports = [ ];

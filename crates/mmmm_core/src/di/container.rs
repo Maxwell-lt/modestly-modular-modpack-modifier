@@ -5,7 +5,7 @@ use tokio::sync::broadcast::{self, error::SendError};
 
 use crate::{
     file::{filestore::FileStore, filetree::FileTree},
-    node::config::{ChannelId, ModDefinition, NodeConfig, NodeConfigTypes},
+    node::config::{ChannelId, ModDefinition},
 };
 
 use super::logger::Logger;

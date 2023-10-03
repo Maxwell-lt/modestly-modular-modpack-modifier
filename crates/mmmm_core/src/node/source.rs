@@ -27,7 +27,7 @@ impl<'a> Source<'a> {
 
     pub fn generate_channels(&self) -> HashMap<ChannelId, InputType> {
         self.sources
-            .into_iter()
+            .iter()
             .map(|source| {
                 (
                     ChannelId(source.id.clone(), "default".into()),
@@ -44,7 +44,7 @@ impl<'a> Source<'a> {
     pub fn spawn(self, ctx: &DiContainer) -> Result<JoinHandle<()>, NodeInitError> {
         let resolved_channels = self
             .sources
-            .into_iter()
+            .iter()
             .map(|s| {
                 let channel_id = ChannelId(s.id.clone(), "default".into());
                 ctx.get_sender(&channel_id)
