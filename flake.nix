@@ -47,7 +47,10 @@
 
 	  doCheck = false;  # The tests require internet access.
 
-	  cargoSha256 = "sha256-dur8jjAX/fy19Wxaa+YgSNeuc5TkiI8HH51JN+/c/4Y=";
+          cargoSha256 = "sha256-dur8jjAX/fy19Wxaa+YgSNeuc5TkiI8HH51JN+/c/4Y=";
+          meta = {
+            mainProgram = "modestly-modular-modpack-modifier-cli";
+          };
 	};
   });
 }
