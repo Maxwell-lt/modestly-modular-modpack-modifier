@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, str::FromStr, thread::JoinHandle};
 
-use super::{archive_downloader::ArchiveDownloaderNode, dir_merge::DirectoryMerger, file_filter::FileFilterNode, mod_resolver::ModResolver};
+use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver};
 use crate::di::container::{DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
 use serde::{de, Deserialize, Serialize};
@@ -37,8 +37,8 @@ pub struct PackDefinition {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 pub enum NodeConfigTypes {
-    ArchiveDownloaderNode,
-    FileFilterNode,
+    ArchiveDownloader,
+    FileFilter,
     DirectoryMerger,
     ModResolver,
 }
@@ -250,11 +250,11 @@ mod tests {
     source: url
     location: 'https://github.com/VazkiiMods/Patchouli/releases/download/release-1.20.1-81/Patchouli-1.20.1-81-FORGE.jar'
 - id: download
-  kind: ArchiveDownloaderNode
+  kind: ArchiveDownloader
   input:
     url: pack-url
 - id: filter
-  kind: FileFilterNode
+  kind: FileFilter
   input:
     files: download
     pattern: filter-pattern::default
@@ -316,12 +316,12 @@ mod tests {
                 ]),
             }),
             NodeConfigEntry::Node(NodeDefinition {
-                kind: NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode),
+                kind: NodeConfigTypes::ArchiveDownloader(ArchiveDownloader),
                 id: "download".into(),
                 input: HashMap::from([("url".into(), ChannelId::from_str("pack-url").unwrap())]),
             }),
             NodeConfigEntry::Node(NodeDefinition {
-                kind: NodeConfigTypes::FileFilterNode(FileFilterNode),
+                kind: NodeConfigTypes::FileFilter(FileFilter),
                 id: "filter".into(),
                 input: HashMap::from([
                     ("files".into(), ChannelId::from_str("download").unwrap()),

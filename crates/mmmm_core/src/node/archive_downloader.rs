@@ -17,11 +17,11 @@ use tokio::sync::broadcast::channel;
 use zip::read::ZipArchive;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct ArchiveDownloaderNode;
+pub struct ArchiveDownloader;
 
 const URL: &str = "url";
 
-impl NodeConfig for ArchiveDownloaderNode {
+impl NodeConfig for ArchiveDownloader {
     fn validate_and_spawn(
         &self,
         node_id: String,
@@ -90,7 +90,7 @@ mod tests {
         let url_channel = tokio::sync::broadcast::channel::<String>(1).0;
         let node_id = "archive_downloader_test";
         let input_ids = HashMap::from([("url".to_string(), ChannelId::from_str("test_node::test_output").unwrap())]);
-        let node = NodeConfigTypes::ArchiveDownloaderNode(ArchiveDownloaderNode);
+        let node = NodeConfigTypes::ArchiveDownloader(ArchiveDownloader);
         let mut ctx = DiContainerBuilder::default()
             .channel(input_ids.get("url").unwrap().clone(), InputType::Text(url_channel.clone()))
             .channel_from_node(node.generate_channels(node_id))

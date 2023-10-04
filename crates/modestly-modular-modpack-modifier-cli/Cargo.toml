@@ -7,3 +7,7 @@ authors.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version = "4.4.6", features = ["derive"] }
+color-eyre = "0.6.2"
+toml = "0.8.1"
+mmmm_core = { path = "../mmmm_core" }

@@ -1,9 +1,13 @@
 use super::filepath::FilePath;
 use super::filestore::FileStore;
 use std::collections::{HashMap, HashSet};
+use std::io::{Seek, Write};
 use std::sync::Arc;
 use std::u128;
 use thiserror::Error;
+use zip::result::ZipError;
+use zip::write::FileOptions;
+use zip::ZipWriter;
 
 #[derive(Clone, Debug)]
 pub struct FileTree {
@@ -49,7 +53,7 @@ impl FileTree {
                 self.contents.insert(to.clone(), *hash);
                 Ok(())
             },
-            None => Err(FileTreeError::FileNotFoundError(from.to_string())),
+            None => Err(FileTreeError::FileNotFound(from.to_string())),
         }
     }
 
@@ -104,12 +108,32 @@ impl FileTree {
             },
         }
     }
+
+    /// Write all files from this [`FileTree`] to a ZIP file.
+    pub fn zip<W>(&self, buffer: &mut W) -> Result<usize, FileTreeError>
+    where
+        W: Write + Seek,
+    {
+        let mut zip = ZipWriter::new(buffer);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let mut total_bytes = 0;
+        for (name, hash) in &self.contents {
+            zip.start_file(name.to_string(), options)?;
+            total_bytes += zip.write(&self.store.get_file(*hash).ok_or_else(|| FileTreeError::FileNotFound(name.to_string()))?)?;
+        }
+        zip.finish()?;
+        Ok(total_bytes)
+    }
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum FileTreeError {
     #[error("File not found at path {0}")]
-    FileNotFoundError(String),
+    FileNotFound(String),
+    #[error("Encountered error while zipping tree. Error: {0}")]
+    Zip(#[from] ZipError),
+    #[error("Encountered error while adding file to zip. Error: {0}")]
+    ZipWrite(#[from] std::io::Error)
 }
 
 #[cfg(test)]
@@ -161,10 +185,11 @@ mod tests {
             &FilePath::from_str("destination/path.txt").unwrap(),
         );
 
-        assert_eq!(
-            result.unwrap_err(),
-            FileTreeError::FileNotFoundError("path/does/not/exist.txt".to_string())
-        );
+        if let FileTreeError::FileNotFound(path) = result.unwrap_err() {
+            assert_eq!(path, "path/does/not/exist.txt");
+        } else {
+            panic!("Wrong error")
+        }
     }
 
     #[test]

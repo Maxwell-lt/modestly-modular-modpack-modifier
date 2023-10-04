@@ -15,12 +15,12 @@ use super::{
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct FileFilterNode;
+pub struct FileFilter;
 
 const FILES: &str = "files";
 const PATTERN: &str = "pattern";
 
-impl NodeConfig for FileFilterNode {
+impl NodeConfig for FileFilter {
     fn validate_and_spawn(
         &self,
         node_id: String,
@@ -86,7 +86,7 @@ mod tests {
             ("files".into(), ChannelId("source_filetree".into(), "default".into())),
             ("pattern".into(), ChannelId("globs".into(), "default".into())),
         ]);
-        let node = NodeConfigTypes::FileFilterNode(FileFilterNode);
+        let node = NodeConfigTypes::FileFilter(FileFilter);
         let mut ctx = DiContainerBuilder::default()
             .channel_from_node(node.generate_channels(node_id))
             .channel(channel_ids.get("files").unwrap().clone(), InputType::Files(file_in_channel.clone()))
