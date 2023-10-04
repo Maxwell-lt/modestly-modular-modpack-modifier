@@ -133,7 +133,7 @@ pub enum FileTreeError {
     #[error("Encountered error while zipping tree. Error: {0}")]
     Zip(#[from] ZipError),
     #[error("Encountered error while adding file to zip. Error: {0}")]
-    ZipWrite(#[from] std::io::Error)
+    ZipWrite(#[from] std::io::Error),
 }
 
 #[cfg(test)]

@@ -89,8 +89,10 @@ mod tests {
         let node = NodeConfigTypes::FileFilter(FileFilter);
         let mut ctx = DiContainerBuilder::default()
             .channel_from_node(node.generate_channels(node_id))
-            .channel(channel_ids.get("files").unwrap().clone(), InputType::Files(file_in_channel.clone()))
-            .channel(channel_ids.get("pattern").unwrap().clone(), InputType::List(filter_in_channel.clone()))
+            .channel_from_node(HashMap::from([
+                (channel_ids.get("files").unwrap().clone(), InputType::Files(file_in_channel.clone())),
+                (channel_ids.get("pattern").unwrap().clone(), InputType::List(filter_in_channel.clone())),
+            ]))
             .build();
 
         let mut rx = get_output_test!(&ChannelId::from_str(node_id).unwrap(), Files, ctx);

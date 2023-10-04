@@ -56,6 +56,12 @@ impl FileStore {
     }
 }
 
+impl Default for FileStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PartialEq for FileStore {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.data, &other.data)

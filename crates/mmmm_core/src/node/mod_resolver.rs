@@ -331,7 +331,10 @@ mod tests {
         }
         let mut ctx = ctx_builder
             .channel_from_node(node.generate_channels(node_id))
-            .channel(ChannelId::from_str("mod-source").unwrap(), InputType::Mods(mod_channel.clone()))
+            .channel_from_node(HashMap::from([(
+                ChannelId::from_str("mod-source").unwrap(),
+                InputType::Mods(mod_channel.clone()),
+            )]))
             .set_config("minecraft_version", "1.12.2")
             .set_config("modloader", "forge")
             .build();

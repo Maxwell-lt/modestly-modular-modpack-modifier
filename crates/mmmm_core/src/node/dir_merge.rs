@@ -102,9 +102,11 @@ mod tests {
         let c3 = tokio::sync::broadcast::channel::<FileTree>(1).0;
         let mut ctx = DiContainerBuilder::default()
             .channel_from_node(node.generate_channels(node_id))
-            .channel(ChannelId::from_str("tree1").unwrap(), InputType::Files(c1.clone()))
-            .channel(ChannelId::from_str("tree2").unwrap(), InputType::Files(c2.clone()))
-            .channel(ChannelId::from_str("tree3").unwrap(), InputType::Files(c3.clone()))
+            .channel_from_node(HashMap::from([
+                (ChannelId::from_str("tree1").unwrap(), InputType::Files(c1.clone())),
+                (ChannelId::from_str("tree2").unwrap(), InputType::Files(c2.clone())),
+                (ChannelId::from_str("tree3").unwrap(), InputType::Files(c3.clone())),
+            ]))
             .build();
 
         let input_ids = HashMap::from([

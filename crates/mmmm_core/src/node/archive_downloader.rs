@@ -92,7 +92,10 @@ mod tests {
         let input_ids = HashMap::from([("url".to_string(), ChannelId::from_str("test_node::test_output").unwrap())]);
         let node = NodeConfigTypes::ArchiveDownloader(ArchiveDownloader);
         let mut ctx = DiContainerBuilder::default()
-            .channel(input_ids.get("url").unwrap().clone(), InputType::Text(url_channel.clone()))
+            .channel_from_node(HashMap::from([(
+                input_ids.get("url").unwrap().clone(),
+                InputType::Text(url_channel.clone()),
+            )]))
             .channel_from_node(node.generate_channels(node_id))
             .build();
         let mut output_rx = get_output_test!(ChannelId::from_str(node_id).unwrap(), Files, ctx);

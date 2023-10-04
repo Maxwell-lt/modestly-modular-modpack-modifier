@@ -117,9 +117,9 @@ pub fn build_graph(pack_definition: &str, global_config: MMMMConfig) -> Result<G
 
 #[cfg(test)]
 mod tests {
-    use std::{time::Duration};
+    use std::time::Duration;
 
-    use crate::{node::utils::read_channel};
+    use crate::node::utils::read_channel;
 
     use super::*;
 

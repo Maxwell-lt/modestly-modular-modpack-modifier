@@ -188,12 +188,6 @@ impl DiContainerBuilder {
         self
     }
 
-    /// Adds a channel with an ID.
-    pub fn channel(mut self, id: ChannelId, channel: InputType) -> Self {
-        self.channels.insert(id, channel);
-        self
-    }
-
     pub fn set_config(mut self, key: &str, value: &str) -> Self {
         self.configs.insert(key.to_owned(), value.to_owned());
         self
@@ -235,7 +229,9 @@ mod tests {
     fn get_sender() {
         let (tx, mut rx) = broadcast::channel::<String>(1);
         let channel_id = ChannelId("node1".into(), "outputA".into());
-        let c = DiContainerBuilder::default().channel(channel_id.clone(), InputType::Text(tx)).build();
+        let c = DiContainerBuilder::default()
+            .channel_from_node(HashMap::from([(channel_id.clone(), InputType::Text(tx))]))
+            .build();
 
         let container_tx = match c.get_sender(&channel_id).unwrap() {
             InputType::Text(channel) => channel,
@@ -251,7 +247,7 @@ mod tests {
         let tx = broadcast::channel::<String>(1).0;
         let channel_id = ChannelId("node1".into(), "outputA".into());
         let c = DiContainerBuilder::default()
-            .channel(channel_id.clone(), InputType::Text(tx.clone()))
+            .channel_from_node(HashMap::from([(channel_id.clone(), InputType::Text(tx.clone()))]))
             .build();
 
         let mut container_rx = match c.get_receiver(&channel_id).unwrap() {

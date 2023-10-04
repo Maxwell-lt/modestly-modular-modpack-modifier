@@ -39,15 +39,25 @@
 
 	defaultPackage = rustPlatform.buildRustPackage {
 	  pname = "modestly-modular-modpack-modifier";
-	  version = "0.1.0";
+	  version = "0.1.1";
 
 	  src = builtins.filterSource
 	    (path: type: type != "symlink" && baseNameOf path != "target")
-	    ./.;
+            ./.;
 
-	  doCheck = false;  # The tests require internet access.
+          # Skip tests that require internet access.
+          checkFlags = [
+            "--skip=modrinth::"
+            "--skip=curse::"
+            "--skip=di::orch::tests::test_orchestrator"
+            "--skip=node::archive_downloader::tests::test_archive_downloader"
+            "--skip=node::mod_resolver::tests::test_mod_resolver"
+          ];
 
-          cargoSha256 = "sha256-dur8jjAX/fy19Wxaa+YgSNeuc5TkiI8HH51JN+/c/4Y=";
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
+
           meta = {
             mainProgram = "modestly-modular-modpack-modifier-cli";
           };
