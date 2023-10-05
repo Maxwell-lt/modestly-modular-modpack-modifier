@@ -1,4 +1,7 @@
 = Modestly Modular Modpack Modifier
+:source-highlighter: rouge
+:toc:
+:toclevels: 3
 
 WIP attempt at building a successor to https://github.com/Erisia/cursetool-rs[Erisia/cursetool-rs].
 
@@ -7,3 +10,236 @@ this tool aims to be a full-service modpack builder, allowing workflows to be de
 patch config files, output a Nix manifest and static pack files, and more.
 
 Workflows will be YAML files that define a DAG of operations to be done, and the connections between each operation. See `design.adoc` for vague ideas on how this will be accomplished.
+
+== Usage
+
+With Nix Flakes enabled, run
+
+[source,console]
+----
+$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.1.1 -- ./pack-manifest.yml
+----
+
+Optionally, the paths where output files should be saved can be specified with `-o /path/to/output` or `--output-dir /path/to/output`,
+and the directory where a `mmmm.toml` configuration file is located can be specified with `-c /path/to/config` or `--config-dir /path/to/config`.
+If not specified, the current directory will be used.
+
+[#config-file-sidebar,reftext="Config File Format"]
+.Config File Format
+****
+The config file must be named `mmmm.toml`, and should be present in the specified configuration directory if certain features are required.
+
+.Curse API (set one of two)
+* `curse_api_key`
+** Valid API key from https://console.curseforge.com/#/api-keys. (Requires account)
+* `curse_proxy_url`
+** Base URL of a proxy service allowing unauthenticated access to the Curse API.
+Several such services are available, or you can host your own with https://github.com/bmpm-mc/cfproxy[CFPROXY].
+****
+
+== Defining a workflow
+
+Workflows are defined as a YAML file.
+
+The top level consists of two keys, `config` and `nodes`.
+
+[source,yaml]
+----
+config:
+  ...
+nodes:
+  ...
+----
+
+The `config` key contains key/value pairs, where the values must be strings.
+The values set here will be available globally to any nodes that require them.
+The documentation for each node will explain which keys are required.
+
+[source,yaml]
+----
+config:
+  minecraft_version: '1.7.10'
+----
+
+The `nodes` key contains an array of three types of nodes: source, intermediate, and output.
+These can be defined in any order within the `nodes` array, and link to each other by name.
+
+[NOTE]
+.Named outputs and implied `default`
+====
+Intermediate nodes can have one or more outputs, where the primary output will be named `default`.
+Whenever a channel reference is specified without use of the `::` channel name operator, an implied `::default` is appended.
+For example, an output channel named `inverse` on a node named `config-filter` can be referenced with the channel name `config-filter::inverse`.
+If we instead want to connect to the primary output channel of that same node, either `config-filter` or `config-filter::default` will suffice.
+Source nodes also output to the `default` channel.
+
+For brevity, examples in this document will generally omit the output name.
+====
+
+=== Source nodes
+
+Source nodes are YAML objects with keys `id` and `value`. The `id` key names the node, and is how other nodes will reference it.
+The `value` node can be either a string (*Text*), array of strings (*List*), or array of mods (*Mods*).
+
+[source,yaml]
+----
+nodes:
+  - id: text-node
+    value: 'Hello World!'
+  - id: list-node
+    value:
+      - 'Hello'
+      - 'World'
+  - id: mods-node
+    value:
+      - name: 'appleskin'
+        source: curse
+----
+
+The mod schema further breaks down into three categories: CurseForge, Modrinth, and direct URL.
+The `name` and `source` fields are mandatory for all mod source types, and the URL type additionally requires the URL to be set.
+All other fields are optional.
+
+[source,yaml]
+----
+# CurseForge
+- name: 'appleskin'
+  source: curse
+# Optional fields:
+  id: 123456
+  file_id: 12345678
+  required: true
+  default: true
+  side: client
+
+# Modrinth
+- name: 'sodium'
+  source: modrinth
+# Optional fields:
+  id: AbCdE123
+  file_id: 1A2b3C4d
+  required: true
+  default: true
+  side: server
+
+# Direct URL
+- name: 'botania-gtnh'
+  source: url
+  location: 'https://github.com/GTNewHorizons/Botania/releases/download/1.10.0-GTNH/Botania-1.10.0-GTNH.jar'
+# Optional fields:
+  filename: 'Botania-1.10.0-GTNH.jar'
+  required: true
+  default: true
+  side: both
+----
+
+=== Output nodes
+
+Output nodes are YAML objects with keys `source` and `filename`.
+The `source` key links to the node data is received from, and `filename` defines the name of the file that should be output.
+The referenced channel must have a type of either *Text* or *Files*.
+Output nodes with a source channel of other types will be ignored.
+Output nodes linked to a *Text* channel will write to a file with exactly the name specified by `filename`,
+but nodes linked to a *Files* channel will have their file extension (if present) replaced with `.zip`.
+
+[source,yaml]
+----
+nodes:
+  - id: file-contents
+    value: |
+      Hello World!
+      This is a multiline YAML input that will be put into a file!
+  # This output node will write the text from the file-contents node to "output.txt"
+  - source: file-contents
+    filename: output.txt
+----
+
+=== Intermediate nodes
+
+Each intermediate node is a YAML object with keys `id`, `kind`, and `input`.
+The `id` key sets its name, the `kind` key sets its type, and the `input` key is a map of named inputs to the output channels of other nodes.
+Each node type has a different set of named inputs required.
+
+[source,yaml]
+----
+nodes:
+  - id: source-node-with-url
+    value: https://example.com/file.zip
+  - id: download-pack
+    kind: ArchiveDownloader
+    input:
+      url: source-node-with-url
+----
+
+==== ArchiveDownloader
+
+The ArchiveDownloader node downloads a ZIP archive from a provided URL, then unpacks it.
+
+.Inputs
+* `url`
+** Type: *Text*
+
+.Outputs
+* `default`
+** Type: *Files*
+
+==== DirectoryMerger
+
+The DirectoryMerger node takes multiple *Files* inputs and combines them into a single *Files* output.
+
+This node is special, in that it accepts any number of inputs, with any name.
+The names provided for inputs are used to resolve conflicts between files with the same name; inputs with names with an earlier alphabetical ordering take precedence.
+
+For example, two *Files* channels have a file named "config/modconfig.cfg".
+If one of those channels is provided to an input named `input-a`, and the other `input-b`, the version of the file from `input-a` will be retained.
+
+.Inputs
+* Multiple channels with any name will be accepted
+** Type: *Files*
+
+.Outputs
+* `default`
+** Type: *Files*
+
+==== FileFilter
+
+The FileFilter node takes a *Files* input along with a *List* input containing a series of glob patterns, and outputs all files that match _any_ specified glob pattern.
+Files that match none of the specified glob patterns are sent to the named output `inverse`.
+Inverted glob patterns are not supported, so the `inverse` channel should be used in use cases where a specific set of files is to be excluded.
+
+.Inputs
+* `files`
+** Type: *Files*
+* `pattern`
+** Type: *List*
+
+.Outputs
+* `default`
+** Type: *Files*
+* `inverse`
+** Type: *Files*
+
+==== ModResolver
+
+The ModResolver node takes a *Mods* input and outputs a *Text* channel with each mod resolved into the Nix file format supported by https://github.com/Erisia/builder[Erisia/builder].
+
+[IMPORTANT]
+.Curse API
+====
+If any mods processed by a ModResolver have a CurseForge source, the config file `mmmm.toml` must be present in the config directory with either a valid Curse API key, or the URL to a Curse API proxy service.
+See <<config-file-sidebar>> for details.
+====
+
+.Config keys
+* `minecraft_version`
+** Version of Minecraft for which mods should be resolved, in cases where the exact file is not specified.
+* `modloader`
+** Modloader for which mods should be resolved, in cases where the exact file is not specified.
+
+.Inputs
+* `mods`
+** Type: *Mods*
+
+.Outputs
+* `default`
+** Type: *Text*
