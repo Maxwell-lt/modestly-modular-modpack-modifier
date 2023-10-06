@@ -6,6 +6,7 @@ use std::{
 use crate::di::container::{DiContainer, InputType, OutputType};
 use serde::Deserialize;
 use tokio::sync::broadcast::channel;
+use tracing::{span, Level};
 
 use super::utils::log_err;
 use super::{config::ChannelId, utils};
@@ -27,6 +28,7 @@ impl NodeConfig for FileFilter {
         input_ids: &HashMap<String, ChannelId>,
         ctx: &DiContainer,
     ) -> Result<JoinHandle<()>, NodeInitError> {
+        let _span = span!(Level::INFO, "FileFilter", nodeid = node_id).entered();
         let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
         let inverse_channel = utils::get_output!(ChannelId(node_id.clone(), "inverse".into()), Files, ctx)?;
         let mut file_input_channel = utils::get_input!(FILES, Files, ctx, input_ids)?;

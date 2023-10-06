@@ -42,6 +42,16 @@ impl Logger {
     pub fn get_logs(&self) -> impl Iterator<Item = &LogMessage> + '_ {
         self.logs.iter().map(|item| item.1)
     }
+
+    pub fn collect_logs_from(&self, index: usize) -> Vec<&LogMessage> {
+        let mut result = Vec::new();
+        let mut i = index;
+        while let Some(message) = self.logs.get(i) {
+            result.push(message);
+            i += 1;
+        }
+        result
+    }
 }
 
 impl Default for Logger {
@@ -68,5 +78,19 @@ mod tests {
         assert_eq!(next.message, "Did a thing");
 
         assert_eq!(log_iter.next(), None);
+    }
+
+    #[test]
+    fn test_logs_from_index() {
+        let logger = Logger::new();
+
+        logger.log("node".into(), LogLevel::Info, "Did a thing".into(), None);
+
+        assert_eq!(logger.collect_logs_from(0).len(), 1);
+
+        logger.log("node".into(), LogLevel::Info, "Did another thing".into(), None);
+
+        assert_eq!(logger.collect_logs_from(1).len(), 1);
+        assert_eq!(logger.collect_logs_from(0).len(), 2);
     }
 }

@@ -5,6 +5,7 @@ use std::{
 
 use serde::Deserialize;
 use tokio::sync::broadcast::{channel, Receiver};
+use tracing::{span, Level};
 
 use crate::di::container::{DiContainer, InputType, OutputType};
 
@@ -41,6 +42,7 @@ impl NodeConfig for DirectoryMerger {
         let logger = ctx.get_logger();
         let mut waker = ctx.get_waker();
         Ok(spawn(move || {
+            let _span = span!(Level::INFO, "DirectoryMerger", nodeid = node_id).entered();
             let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
             if !should_run {
                 panic!()

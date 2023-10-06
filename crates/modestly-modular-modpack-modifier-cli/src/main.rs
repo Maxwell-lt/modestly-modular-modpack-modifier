@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, thread, time::Duration};
+use std::{fs, io::Write, path::PathBuf, thread, time::Duration};
 
 use clap::Parser;
 use color_eyre::{
@@ -6,9 +6,17 @@ use color_eyre::{
     Section,
 };
 use mmmm_core::{logger::LogLevel, orch::MMMMConfig};
+use tracing_indicatif::{writer::get_indicatif_stderr_writer, IndicatifLayer};
+use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer, filter::LevelFilter};
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+    let indicatif_layer = IndicatifLayer::new();
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_writer(indicatif_layer.get_stderr_writer()).with_filter(LevelFilter::INFO))
+        .with(indicatif_layer)
+        .init();
+
     let args = Args::parse();
     let pack_def = fs::read_to_string(&args.definition)
         .wrap_err_with(|| format!("Failed to read pack definition YAML from {}", args.definition.to_string_lossy()))
@@ -47,16 +55,35 @@ fn main() -> Result<()> {
         }
     }
     let tick_rate = Duration::from_millis(100);
+    let mut log_index = 0;
     loop {
-        if let Some(log) = logger.get_logs().find(|l| l.level == LogLevel::Panic) {
+        let logs = logger.collect_logs_from(log_index);
+        log_index += logs.len();
+        if let Some(log) = logs.iter().find(|l| l.level == LogLevel::Panic) {
             bail!("Node '{}' failed with message '{}' and data '{:?}'!", log.source, log.message, log.data);
         }
+
+        logs.into_iter().for_each(|log| {
+            writeln!(
+                get_indicatif_stderr_writer().unwrap(),
+                "{} [{:?}] {}: '{}' ({:?})",
+                log.timestamp,
+                log.level,
+                log.source,
+                log.message,
+                log.data
+            )
+            .unwrap()
+        });
 
         file_outputs.retain_mut(|channel| {
             if let Ok(data) = channel.1.try_recv() {
                 let out_path = output_dir.join::<PathBuf>(channel.0.clone().into());
                 println!("Output ready, writing to {}", out_path.to_string_lossy());
-                fs::write(&out_path, data).unwrap();
+                fs::write(&out_path, data)
+                    .wrap_err(format!("Could not write to file {}", out_path.to_string_lossy()))
+                    .suggestion("Ensure the parent directory exists, and that the current user has write access to it")
+                    .unwrap();
                 println!("Finished writing to {}", out_path.to_string_lossy());
                 return false;
             }
@@ -66,10 +93,13 @@ fn main() -> Result<()> {
         zip_outputs.retain_mut(|channel| {
             if let Ok(data) = channel.1.try_recv() {
                 let out_path = output_dir.join::<PathBuf>(channel.0.clone().into()).with_extension("zip");
-                println!("Output ready, writing to {}", out_path.to_string_lossy());
-                let mut out_file = fs::File::create(&out_path).unwrap();
-                let bytes = data.zip(&mut out_file).unwrap();
-                println!("Finished writing to {}. Wrote {} bytes.", out_path.to_string_lossy(), bytes);
+                writeln!(get_indicatif_stderr_writer().unwrap(), "Output ready, writing to {}", out_path.to_string_lossy()).unwrap();
+                let mut out_file = fs::File::create(&out_path)
+                    .wrap_err(format!("Could not write to file {}", out_path.to_string_lossy()))
+                    .suggestion("Ensure the parent directory exists, and that the current user has write access to it")
+                    .unwrap();
+                let bytes = data.zip(&mut out_file).wrap_err("Failed to write to file buffer").unwrap();
+                writeln!(get_indicatif_stderr_writer().unwrap(), "Finished writing to {}. Wrote {} bytes.", out_path.to_string_lossy(), bytes).unwrap();
                 return false;
             }
             true

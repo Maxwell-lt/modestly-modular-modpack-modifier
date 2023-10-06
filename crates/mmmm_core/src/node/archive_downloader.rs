@@ -7,6 +7,7 @@ use crate::{
 };
 use api_client::common::download_file;
 use serde::Deserialize;
+use tracing::{span, Level, event};
 use std::io::Cursor;
 use std::{
     collections::HashMap,
@@ -34,12 +35,14 @@ impl NodeConfig for ArchiveDownloader {
         let mut waker = ctx.get_waker();
         let logger = ctx.get_logger();
         Ok(spawn(move || {
+            let _span = span!(Level::INFO, "ArchiveDownloader", nodeid = node_id).entered();
             let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
             if !should_run {
                 panic!()
             }
 
             let url = log_err(in_channel.blocking_recv(), &logger, &node_id);
+            event!(Level::INFO, "Downloading archive from {}", url);
 
             let archive = log_err(download_file(&url), &logger, &node_id);
 

@@ -14,6 +14,7 @@ use serde::Deserialize;
 use sha2::Sha256;
 use thiserror::Error;
 use tokio::sync::broadcast::channel;
+use tracing::{span, Level, event};
 
 use crate::di::{
     container::{DiContainer, InputType, OutputType},
@@ -52,12 +53,14 @@ impl NodeConfig for ModResolver {
         let curse_client_option = ctx.get_curse_client();
         let modrinth_client = ctx.get_modrinth_client();
         Ok(spawn(move || {
+            let _span = span!(Level::INFO, "ModResolver", nodeid = node_id).entered();
             let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
             if !should_run {
                 panic!()
             }
 
             let mods = log_err(mod_channel.blocking_recv(), &logger, &node_id);
+            event!(Level::INFO, "Got {} mods to resolve", mods.len());
 
             // Check if the Curse API is needed, but the client wasn't configured. Logs an error
             // message then terminates the thread, so if execution continues past this block we know it is safe to
@@ -143,6 +146,8 @@ fn resolve_curse(
     mcversion: &str,
     loader: &str,
 ) -> Result<ResolvedMod, ResolveError> {
+    let name = meta.name.clone();
+    let _span = span!(Level::INFO, "Curse", mod_name = name).entered();
     let (mod_response, file_response, file_data) = if let Some(id) = file_id {
         let file_response = client
             .get_files(&[id])?
@@ -213,6 +218,8 @@ fn resolve_modrinth(
     mcversion: &str,
     loader: &str,
 ) -> Result<ResolvedMod, ResolveError> {
+    let name = meta.name.clone();
+    let _span = span!(Level::INFO, "Modrinth", mod_name = name).entered();
     let (mod_response, file_response) = if let Some(id) = file_id {
         let file_response = client.get_version(&id)?;
         let mod_response = client.get_mod_info(&file_response.project_id)?;
@@ -255,6 +262,8 @@ fn resolve_modrinth(
 }
 
 fn resolve_url(location: String, filename: Option<String>, meta: ModDefinitionFields) -> Result<ResolvedMod, ResolveError> {
+    let name = meta.name.clone();
+    let _span = span!(Level::INFO, "URL", mod_name = name).entered();
     let file_data = download_file(&location)?;
     let resolved_filename = match filename {
         Some(value) => value,
