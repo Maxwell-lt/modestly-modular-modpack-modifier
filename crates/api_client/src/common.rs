@@ -114,10 +114,22 @@ impl ApiClient {
 
     pub fn get<'a, P>(&self, path: &str, params: P) -> Result<ureq::Response, Box<ureq::Error>>
     where
-        P: IntoIterator<Item = (&'a str, &'a str)>,
+        P: IntoIterator<Item = (&'a str, &'a str)> + Clone,
     {
-        self.wait_for_token();
-        self.inner.client.get(&self.build_url(path)).query_pairs(params).call().map_err(Box::new)
+        let mut retries = 2;
+        loop {
+            self.wait_for_token();
+            match self.inner.client.get(&self.build_url(path)).query_pairs(params.clone()).call().map_err(Box::new) {
+                Ok(response) => return Ok(response),
+                Err(err) => {
+                    if retries > 0 {
+                        retries -= 1;
+                    } else {
+                        return Err(err);
+                    }
+                },
+            }
+        }
     }
 
     pub fn post_json<T>(&self, path: &str, body: T) -> Result<ureq::Response, Box<ureq::Error>>
