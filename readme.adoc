@@ -223,6 +223,8 @@ Inverted glob patterns are not supported, so the `inverse` channel should be use
 
 The ModResolver node takes a *Mods* input and outputs a *Text* channel with each mod resolved into the Nix file format supported by https://github.com/Erisia/builder[Erisia/builder].
 
+The secondary `json` channel outputs a JSON array of resolved mods.
+
 [IMPORTANT]
 .Curse API
 ====
@@ -242,4 +244,6 @@ See <<config-file-sidebar>> for details.
 
 .Outputs
 * `default`
+** Type: *Text*
+* `json`
 ** Type: *Text*

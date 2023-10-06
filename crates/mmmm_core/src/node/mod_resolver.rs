@@ -37,6 +37,7 @@ impl NodeConfig for ModResolver {
     ) -> Result<JoinHandle<()>, NodeInitError> {
         let mut mod_channel = get_input!("mods", Mods, ctx, input_ids)?;
         let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Text, ctx)?;
+        let json_out = get_output!(ChannelId(node_id.clone(), "json".into()), Text, ctx)?;
 
         let logger = ctx.get_logger();
         let mut waker = ctx.get_waker();
@@ -79,7 +80,7 @@ impl NodeConfig for ModResolver {
                 panic!();
             }
 
-            let resolved = mods
+            let resolved: Vec<ResolvedMod> = mods
                 .into_iter()
                 .map(|mod_def| match mod_def {
                     ModDefinition::Modrinth { id, file_id, fields } => log_err(
@@ -94,8 +95,7 @@ impl NodeConfig for ModResolver {
                     ),
                     ModDefinition::Url { location, filename, fields } => log_err(resolve_url(location, filename, fields), &logger, &node_id),
                 })
-                .map(|r| r.to_string())
-                .collect::<Vec<String>>();
+                .collect();
 
             let raw_nix_file = format!(
                 r#"{{
@@ -106,15 +106,22 @@ impl NodeConfig for ModResolver {
                 }};
             }}"#,
                 version = minecraft_version,
-                mods = resolved.join("\n")
+                mods = resolved.iter().map(|s| s.to_string()).collect::<Vec<_>>().join("\n")
             );
             let nix_file = nixpkgs_fmt::reformat_string(&raw_nix_file);
+
+            let json_file = log_err(serde_json::to_string_pretty(&resolved), &logger, &node_id);
+
             log_send_err(out_channel.send(nix_file), &logger, &node_id, "default");
+            log_send_err(json_out.send(json_file), &logger, &node_id, "json");
         }))
     }
 
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType> {
-        HashMap::from([(ChannelId(node_id.to_owned(), "default".into()), InputType::Text(channel(1).0))])
+        HashMap::from([
+            (ChannelId(node_id.to_owned(), "default".into()), InputType::Text(channel(1).0)),
+            (ChannelId(node_id.to_owned(), "json".into()), InputType::Text(channel(1).0)),
+        ])
     }
 }
 
@@ -340,6 +347,7 @@ mod tests {
             .build();
 
         let mut out_channel = get_output_test!(ChannelId::from_str("resolver").unwrap(), Text, ctx);
+        let mut json_out_channel = get_output_test!(ChannelId::from_str("resolver::json").unwrap(), Text, ctx);
 
         let mod_config: Vec<ModDefinition> = serde_yaml::from_str(
             r#"---
@@ -370,6 +378,7 @@ mod tests {
 
         let timeout = Duration::from_secs(30);
         let output: String = read_channel(&mut out_channel, timeout).unwrap();
+        let json_output: String = read_channel(&mut json_out_channel, timeout).unwrap();
 
         let expected = r#"{
   version = "1.12.2";
@@ -417,7 +426,51 @@ mod tests {
   };
 }
 "#;
-        assert_eq!(expected, output);
+
+        let json_expected = r#"[
+  {
+    "name": "appleskin",
+    "title": "AppleSkin",
+    "side": "both",
+    "required": true,
+    "default": true,
+    "filename": "AppleSkin-mc1.12-1.0.14.jar",
+    "encoded": "AppleSkin-mc1.12-1.0.14.jar",
+    "src": "https://cdn.modrinth.com/data/EsAfCjCV/versions/Tsz4BT2X/AppleSkin-mc1.12-1.0.14.jar",
+    "size": 33683,
+    "md5": "b435860d5cfa23bc53d3b8e120be91d4",
+    "sha256": "4bbd37edecff0b420ab0eea166b5d7b4b41a9870bfb8647bf243140dc57f101e"
+  },
+  {
+    "name": "mouse-tweaks",
+    "title": "Mouse Tweaks",
+    "side": "client",
+    "required": true,
+    "default": true,
+    "filename": "MouseTweaks-2.10.1-mc1.12.2.jar",
+    "encoded": "MouseTweaks-2.10.1-mc1.12.2.jar",
+    "src": "https://edge.forgecdn.net/files/3359/843/MouseTweaks-2.10.1-mc1.12.2.jar",
+    "size": 80528,
+    "md5": "a6034d3ff57091c78405e46f1f926282",
+    "sha256": "5e13315f4e0d0c96b1f9b800a42fecb89f519aca81d556c91df617c8751aa575"
+  },
+  {
+    "name": "title-changer",
+    "title": "title-changer",
+    "side": "client",
+    "required": false,
+    "default": true,
+    "filename": "titlechanger-1.1.3.jar",
+    "encoded": "titlechanger-1.1.3.jar",
+    "src": "https://github.com/Maxwell-lt/TitleChanger/releases/download/1.1.3/titlechanger-1.1.3.jar",
+    "size": 5923,
+    "md5": "8fda92da93d78919cff1139e847d3e1c",
+    "sha256": "78bbe270f2f2ca443a4e794ee1f0c5920ef933ce1030bae0dcff45cb16689eb7"
+  }
+]"#;
+
+        assert_eq!(output, expected);
+        assert_eq!(json_output, json_expected);
     }
 
     #[test]
