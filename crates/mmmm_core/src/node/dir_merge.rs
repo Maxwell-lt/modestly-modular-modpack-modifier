@@ -5,13 +5,14 @@ use std::{
 
 use serde::Deserialize;
 use tokio::sync::broadcast::{channel, Receiver};
-use tracing::{span, Level};
+use tracing::{event, span, Level};
+use tracing_unwrap::{OptionExt, ResultExt};
 
 use crate::di::container::{DiContainer, InputType, OutputType};
 
 use super::{
     config::{ChannelId, NodeConfig, NodeInitError},
-    utils::{get_input, get_output, log_err, log_send_err},
+    utils::{get_input, get_output},
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -35,32 +36,28 @@ impl NodeConfig for DirectoryMerger {
             // Sorting is reversed; earlier input names take priority with overlapping files.
             keys.sort_unstable_by(|a, b| b.cmp(a));
             keys.into_iter()
-                .map(|id| get_input!(&id, Files, ctx, input_ids))
-                .collect::<Result<Vec<Receiver<_>>, _>>()
+                .map(|id| get_input!(&id, Files, ctx, input_ids).map(|channel| (id, channel)))
+                .collect::<Result<Vec<(String, Receiver<_>)>, _>>()
         }?;
         let output_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
-        let logger = ctx.get_logger();
         let mut waker = ctx.get_waker();
         Ok(spawn(move || {
             let _span = span!(Level::INFO, "DirectoryMerger", nodeid = node_id).entered();
-            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
-            if !should_run {
+            if !waker.blocking_recv().unwrap_or_log() {
                 panic!()
             }
 
-            let output_dir = log_err(
-                input_channels
-                    .iter_mut()
-                    .map(|channel| log_err(channel.blocking_recv(), &logger, &node_id))
-                    .reduce(|mut res, cur| {
-                        res.add_all(cur);
-                        res
-                    })
-                    .ok_or(String::from("No inputs passed to DirectoryMerger node!")),
-                &logger,
-                &node_id,
-            );
-            log_send_err(output_channel.send(output_dir), &logger, &node_id, "default");
+            let output_dir = input_channels
+                .iter_mut()
+                .map(|(id, channel)| channel.blocking_recv().expect_or_log(&format!("Failed to receive on {id} input")))
+                .reduce(|mut res, cur| {
+                    res.add_all(cur);
+                    res
+                })
+                .expect_or_log(&format!("No inputs passed to DirectoryMerger node with ID {node_id}"));
+            if let Err(_) = output_channel.send(output_dir) {
+                event!(Level::DEBUG, "Channel 'default' has no subscribers");
+            }
         }))
     }
 

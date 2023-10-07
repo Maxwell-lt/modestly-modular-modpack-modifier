@@ -185,7 +185,7 @@ nodes:
       required = "true";
       default = "true";
       filename = "fabric-api-0.89.3+1.20.2.jar";
-      encoded = "fabric-api-0.89.3+1.20.2.jar";
+      encoded = "fabric-api-0.89.3%2B1.20.2.jar";
       src = "https://cdn.modrinth.com/data/P7dR8mSH/versions/Hi8quJUM/fabric-api-0.89.3%2B1.20.2.jar";
       size = "2084853";
       md5 = "e41df274506b22b3de52a1cebb9e16cb";

@@ -5,16 +5,12 @@ use std::{
 
 use thiserror::Error;
 use tokio::sync::broadcast::{channel, error::SendError};
+use tracing::{event, field::display, span, Level};
+use tracing_unwrap::ResultExt;
 
-use crate::di::{
-    container::{DiContainer, InputType},
-    logger::LogLevel,
-};
+use crate::di::container::{DiContainer, InputType};
 
-use super::{
-    config::{ChannelId, ModDefinition, NodeInitError, SourceDefinition, SourceValue},
-    utils::log_err,
-};
+use super::config::{ChannelId, ModDefinition, NodeInitError, SourceDefinition, SourceValue};
 
 pub struct Source<'a> {
     sources: &'a [&'a SourceDefinition],
@@ -98,19 +94,14 @@ impl<'a> Source<'a> {
             )
             .collect::<Result<Vec<_>, NodeInitError>>()?;
         let mut waker = ctx.get_waker();
-        let logger = ctx.get_logger();
         Ok(spawn(move || {
-            let should_run = log_err(waker.blocking_recv(), &logger, "Sources Node");
-            if !should_run {
+            let _span = span!(Level::INFO, "Source Node");
+            if !waker.blocking_recv().unwrap_or_log() {
                 panic!()
             }
             for error in resolved_channels.into_iter().map(|f| f()).filter_map(|r| r.err()) {
-                logger.log(
-                    "Sources Node".into(),
-                    LogLevel::Warning,
-                    "Failed to send data to channel, missing receiver?".into(),
-                    Some(vec![error.to_string()]),
-                );
+                let e = display(error);
+                event!(Level::INFO, e, "Source has no receivers: {e}");
             }
         }))
     }

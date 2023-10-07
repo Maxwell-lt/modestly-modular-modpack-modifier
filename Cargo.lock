@@ -106,7 +106,7 @@ checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
 
 [[package]]
 name = "api_client"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "const_format",
  "lazy_static",
@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "mmmm_core"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "api_client",
@@ -852,6 +852,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-unwrap",
  "urlencoding",
  "xxhash-rust",
  "zip",
@@ -859,14 +860,16 @@ dependencies = [
 
 [[package]]
 name = "modestly-modular-modpack-modifier-cli"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "clap 4.4.6",
  "color-eyre",
  "indicatif",
  "mmmm_core",
+ "tokio",
  "toml",
  "tracing",
+ "tracing-error",
  "tracing-indicatif",
  "tracing-subscriber",
 ]
@@ -1520,6 +1523,15 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tracing-unwrap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77934bd2f10b38daeb37d0e24fb94f7bb83e08b474a0568d6ba71876c797c02e"
+dependencies = [
+ "tracing",
 ]
 
 [[package]]

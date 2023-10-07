@@ -1,13 +1,13 @@
-use super::config::{ChannelId, NodeConfig, NodeInitError};
-use super::utils::log_err;
-use super::utils::{self, log_send_err};
+use super::{
+    config::{ChannelId, NodeConfig, NodeInitError},
+    utils::{get_input, get_output},
+};
 use crate::{
     di::container::{DiContainer, InputType, OutputType},
     file::{filepath::FilePath, filetree::FileTree},
 };
 use api_client::common::download_file;
 use serde::Deserialize;
-use tracing::{span, Level, event};
 use std::io::Cursor;
 use std::{
     collections::HashMap,
@@ -15,6 +15,8 @@ use std::{
     thread::{spawn, JoinHandle},
 };
 use tokio::sync::broadcast::channel;
+use tracing::{event, span, Level};
+use tracing_unwrap::ResultExt;
 use zip::read::ZipArchive;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -29,38 +31,39 @@ impl NodeConfig for ArchiveDownloader {
         input_ids: &HashMap<String, ChannelId>,
         ctx: &DiContainer,
     ) -> Result<JoinHandle<()>, NodeInitError> {
-        let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
-        let mut in_channel = utils::get_input!(URL, Text, ctx, input_ids)?;
+        let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
+        let mut in_channel = get_input!(URL, Text, ctx, input_ids)?;
         let fs = ctx.get_filestore();
         let mut waker = ctx.get_waker();
-        let logger = ctx.get_logger();
         Ok(spawn(move || {
             let _span = span!(Level::INFO, "ArchiveDownloader", nodeid = node_id).entered();
-            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
-            if !should_run {
+            if !waker.blocking_recv().unwrap_or_log() {
                 panic!()
             }
 
-            let url = log_err(in_channel.blocking_recv(), &logger, &node_id);
+            let url = in_channel.blocking_recv().expect_or_log("Failed to receive on url input");
             event!(Level::INFO, "Downloading archive from {}", url);
 
-            let archive = log_err(download_file(&url), &logger, &node_id);
+            let archive = download_file(&url).expect_or_log(&format!("Failed to download archive from URL {url}"));
 
-            let mut zip_archive = log_err(ZipArchive::new(Cursor::new(archive)), &logger, &node_id);
+            let mut zip_archive = ZipArchive::new(Cursor::new(archive)).expect_or_log("Failed to read archive as ZIP");
             let mut filetree = FileTree::new(fs);
             for index in 0..zip_archive.len() {
-                let mut file = log_err(zip_archive.by_index(index), &logger, &node_id);
+                let mut file = zip_archive.by_index(index).expect_or_log("Failed to read file from archive");
                 if file.is_file() {
                     let mut contents: Vec<u8> = Vec::with_capacity(file.size() as usize);
                     file.read_to_end(&mut contents).unwrap();
                     // As in FilePath, we don't care about properly handling "interesting" paths.
-                    let filename = log_err(FilePath::try_from(file.mangled_name().as_ref()), &logger, &node_id);
+                    let filename = FilePath::try_from(file.mangled_name().as_ref())
+                        .expect_or_log(&format!("Filename from archive invalid: {}", file.mangled_name().to_string_lossy()));
 
                     filetree.add_file(filename, contents);
                 }
             }
 
-            log_send_err(out_channel.send(filetree), &logger, &node_id, "default");
+            if let Err(_) = out_channel.send(filetree) {
+                event!(Level::DEBUG, "Channel 'default' has no subscribers");
+            }
         }))
     }
 
@@ -72,10 +75,7 @@ impl NodeConfig for ArchiveDownloader {
 #[cfg(test)]
 mod tests {
     use crate::{
-        di::{
-            container::{DiContainerBuilder, InputType},
-            logger::LogLevel,
-        },
+        di::container::{DiContainerBuilder, InputType},
         file::{filepath::FilePath, filetree::FileTree},
         node::{
             config::{ChannelId, NodeConfigTypes},
@@ -113,6 +113,5 @@ mod tests {
         let output: FileTree = read_channel(&mut output_rx, timeout).unwrap();
         handle.join().unwrap();
         assert!(output.get_file(&FilePath::from_str("modrinth.index.json").unwrap()).is_some());
-        assert!(!ctx.get_logger().get_logs().any(|log| log.level == LogLevel::Panic));
     }
 }

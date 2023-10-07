@@ -8,18 +8,16 @@ use crate::{
     node::config::{ChannelId, ModDefinition},
 };
 
-use super::logger::Logger;
-
 /// Holds references to shared resources required by nodes, and coordinates nodes.
 ///
 /// When a node is initialized, it obtains required objects from this container, such as
-/// input/output channels, a logger, a start signal, and API clients with shared rate limits and
+/// input/output channels, a start signal, and API clients with shared rate limits and
 /// API keys. This achieves a pseudo-IoC structure, where the required dependencies can be loosely
 /// coupled with the code required to spawn a node. Implementors of the [`NodeConfig`] trait can
 /// obtain all of their variable dependencies from the container, returning runtime errors if any
 /// are missing.
 /// After all nodes have been initialized, the owner of a [`DiContainer`] can trigger all nodes to
-/// start, and observe progress through a reference to the [`Logger`].
+/// start.
 pub struct DiContainer {
     // Global config values (e.g. Minecraft version
     configs: HashMap<String, String>,
@@ -35,8 +33,6 @@ pub struct DiContainer {
     // Passing false through the waker channel will abort all nodes, passing true will start them.
     waker: broadcast::Sender<bool>,
     waker_called: bool,
-    // Log messages
-    logs: Logger,
     // Curse API client
     // Curse API requires an API key, so may not exist if no key is found.
     // To prevent Modrinth/URL only packs from building in this case, nodes should only panic when
@@ -117,6 +113,9 @@ impl DiContainer {
             match self.waker.send(true) {
                 Ok(_) => {
                     self.waker_called = true;
+                    // Drop the Sender channels held by the context so that node panics will
+                    // propagate through graph.
+                    self.channels.clear();
                     Ok(())
                 },
                 Err(e) => Err(WakeError::Send(e)),
@@ -136,12 +135,6 @@ impl DiContainer {
                 Err(e) => Err(WakeError::Send(e)),
             }
         }
-    }
-
-    /// Get a [`Logger`], which can be used by nodes to report progress and errors, or the
-    /// managing code to track status.
-    pub fn get_logger(&self) -> Logger {
-        self.logs.clone()
     }
 
     /// Get a CurseForge API client, if one is available.
@@ -200,7 +193,6 @@ impl DiContainerBuilder {
             filestore: FileStore::new(),
             waker: broadcast::channel(1).0,
             waker_called: false,
-            logs: Logger::new(),
             curse_client: self.curse_client,
             modrinth_client: ModrinthClient::new(),
             configs: self.configs,

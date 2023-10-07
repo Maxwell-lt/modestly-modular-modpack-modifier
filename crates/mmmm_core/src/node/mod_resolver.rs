@@ -14,17 +14,15 @@ use serde::Deserialize;
 use sha2::Sha256;
 use thiserror::Error;
 use tokio::sync::broadcast::channel;
-use tracing::{span, Level, event};
+use tracing::{event, span, Level};
+use tracing_unwrap::ResultExt;
 use urlencoding::encode;
 
-use crate::di::{
-    container::{DiContainer, InputType, OutputType},
-    logger::LogLevel::Panic,
-};
+use crate::di::container::{DiContainer, InputType, OutputType};
 
 use super::{
     config::{ChannelId, ModDefinition, ModDefinitionFields, NodeConfig, NodeInitError, ResolvedMod},
-    utils::{get_input, get_output, log_err, log_send_err},
+    utils::{get_input, get_output},
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -41,7 +39,6 @@ impl NodeConfig for ModResolver {
         let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Text, ctx)?;
         let json_out = get_output!(ChannelId(node_id.clone(), "json".into()), Text, ctx)?;
 
-        let logger = ctx.get_logger();
         let mut waker = ctx.get_waker();
 
         let minecraft_version = ctx
@@ -55,49 +52,44 @@ impl NodeConfig for ModResolver {
         let modrinth_client = ctx.get_modrinth_client();
         Ok(spawn(move || {
             let _span = span!(Level::INFO, "ModResolver", nodeid = node_id).entered();
-            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
-            if !should_run {
+            if !waker.blocking_recv().unwrap_or_log() {
                 panic!()
             }
 
-            let mods = log_err(mod_channel.blocking_recv(), &logger, &node_id);
+            let mods = mod_channel.blocking_recv().expect_or_log("Failed to receive on mods input");
             event!(Level::INFO, "Got {} mods to resolve", mods.len());
 
             // Check if the Curse API is needed, but the client wasn't configured. Logs an error
             // message then terminates the thread, so if execution continues past this block we know it is safe to
             // call .unwrap() on the Curse client Option.
             if mods.iter().any(|m| matches!(m, ModDefinition::Curse { .. })) && curse_client_option.is_none() {
-                logger.log(
-                    node_id,
-                    Panic,
-                    "Curse client not set up! Cannot resolve mods.".to_owned(),
-                    Some(
-                        mods.into_iter()
-                            .filter_map(|m| match m {
-                                ModDefinition::Curse { fields, .. } => Some(fields.name),
-                                ModDefinition::Modrinth { .. } => None,
-                                ModDefinition::Url { .. } => None,
-                            })
-                            .collect(),
-                    ),
-                );
+                let curse_mods: Vec<String> = mods
+                    .into_iter()
+                    .filter_map(|m| match m {
+                        ModDefinition::Curse { fields, .. } => Some(fields.name),
+                        ModDefinition::Modrinth { .. } => None,
+                        ModDefinition::Url { .. } => None,
+                    })
+                    .collect();
+                let modlist = curse_mods.join(", ");
+                event!(Level::ERROR, "Curse client not set up! Cannot resolve mods: {modlist}");
                 panic!();
             }
 
             let resolved: Vec<ResolvedMod> = mods
                 .into_iter()
                 .map(|mod_def| match mod_def {
-                    ModDefinition::Modrinth { id, file_id, fields } => log_err(
-                        resolve_modrinth(&modrinth_client, id, file_id, fields, &minecraft_version, &modloader),
-                        &logger,
-                        &node_id,
-                    ),
-                    ModDefinition::Curse { id, file_id, fields } => log_err(
-                        resolve_curse(curse_client_option.as_ref().unwrap(), id, file_id, fields, &minecraft_version, &modloader),
-                        &logger,
-                        &node_id,
-                    ),
-                    ModDefinition::Url { location, filename, fields } => log_err(resolve_url(location, filename, fields), &logger, &node_id),
+                    ModDefinition::Modrinth { id, file_id, fields } => {
+                        resolve_modrinth(&modrinth_client, id, file_id, fields, &minecraft_version, &modloader)
+                            .expect_or_log("Failed to resolve Modrinth mod")
+                    },
+                    ModDefinition::Curse { id, file_id, fields } => {
+                        resolve_curse(curse_client_option.as_ref().unwrap(), id, file_id, fields, &minecraft_version, &modloader)
+                            .expect_or_log("Failed to resolve Curse mod")
+                    },
+                    ModDefinition::Url { location, filename, fields } => {
+                        resolve_url(location, filename, fields).expect_or_log("Failed to resolve URL mod")
+                    },
                 })
                 .collect();
 
@@ -114,10 +106,14 @@ impl NodeConfig for ModResolver {
             );
             let nix_file = nixpkgs_fmt::reformat_string(&raw_nix_file);
 
-            let json_file = log_err(serde_json::to_string_pretty(&resolved), &logger, &node_id);
+            let json_file = serde_json::to_string_pretty(&resolved).expect_or_log("Serialization of resolved mods to JSON failed");
 
-            log_send_err(out_channel.send(nix_file), &logger, &node_id, "default");
-            log_send_err(json_out.send(json_file), &logger, &node_id, "json");
+            if let Err(_) = out_channel.send(nix_file) {
+                event!(Level::DEBUG, "Channel 'default' has no subscribers");
+            }
+            if let Err(_) = json_out.send(json_file) {
+                event!(Level::DEBUG, "Channel 'json' has no subscribers");
+            }
         }))
     }
 

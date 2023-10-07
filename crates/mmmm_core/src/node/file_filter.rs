@@ -6,14 +6,11 @@ use std::{
 use crate::di::container::{DiContainer, InputType, OutputType};
 use serde::Deserialize;
 use tokio::sync::broadcast::channel;
-use tracing::{span, Level};
+use tracing::{event, span, Level};
+use tracing_unwrap::ResultExt;
 
-use super::utils::log_err;
+use super::config::{NodeConfig, NodeInitError};
 use super::{config::ChannelId, utils};
-use super::{
-    config::{NodeConfig, NodeInitError},
-    utils::log_send_err,
-};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct FileFilter;
@@ -28,26 +25,28 @@ impl NodeConfig for FileFilter {
         input_ids: &HashMap<String, ChannelId>,
         ctx: &DiContainer,
     ) -> Result<JoinHandle<()>, NodeInitError> {
-        let _span = span!(Level::INFO, "FileFilter", nodeid = node_id).entered();
         let out_channel = utils::get_output!(ChannelId(node_id.clone(), "default".into()), Files, ctx)?;
         let inverse_channel = utils::get_output!(ChannelId(node_id.clone(), "inverse".into()), Files, ctx)?;
         let mut file_input_channel = utils::get_input!(FILES, Files, ctx, input_ids)?;
         let mut pattern_input_channel = utils::get_input!(PATTERN, List, ctx, input_ids)?;
         let mut waker = ctx.get_waker();
-        let logger = ctx.get_logger();
         Ok(spawn(move || {
-            let should_run = log_err(waker.blocking_recv(), &logger, &node_id);
-            if !should_run {
+            let _span = span!(Level::INFO, "FileFilter", nodeid = node_id).entered();
+            if !waker.blocking_recv().unwrap_or_log() {
                 panic!()
             }
 
-            let source_filetree = log_err(file_input_channel.blocking_recv(), &logger, &node_id);
-            let pattern = log_err(pattern_input_channel.blocking_recv(), &logger, &node_id);
+            let source_filetree = file_input_channel.blocking_recv().expect_or_log("Failed to receive on files input");
+            let pattern = pattern_input_channel.blocking_recv().expect_or_log("Failed to receive on pattern input");
 
             let (output_filetree, inverse_filetree) = source_filetree.filter_files(&pattern);
 
-            log_send_err(out_channel.send(output_filetree), &logger, &node_id, "default");
-            log_send_err(inverse_channel.send(inverse_filetree), &logger, &node_id, "inverse");
+            if let Err(_) = out_channel.send(output_filetree) {
+                event!(Level::DEBUG, "Channel 'default' has no subscribers");
+            }
+            if let Err(_) = inverse_channel.send(inverse_filetree) {
+                event!(Level::DEBUG, "Channel 'inverse' has no subscribers");
+            }
         }))
     }
 
@@ -64,10 +63,7 @@ mod tests {
     use std::{str::FromStr, time::Duration};
 
     use crate::{
-        di::{
-            container::{DiContainerBuilder, InputType},
-            logger::LogLevel,
-        },
+        di::container::{DiContainerBuilder, InputType},
         file::{filepath::FilePath, filetree::FileTree},
         node::{
             config::NodeConfigTypes,
@@ -128,6 +124,5 @@ mod tests {
             std::str::from_utf8(&inverse.get_file(&FilePath::from_str("modrinth.index.json").unwrap()).unwrap()).unwrap(),
             "{}"
         );
-        assert!(!ctx.get_logger().get_logs().any(|log| log.level == LogLevel::Panic));
     }
 }
