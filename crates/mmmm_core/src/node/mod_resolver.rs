@@ -15,6 +15,7 @@ use sha2::Sha256;
 use thiserror::Error;
 use tokio::sync::broadcast::channel;
 use tracing::{span, Level, event};
+use urlencoding::encode;
 
 use crate::di::{
     container::{DiContainer, InputType, OutputType},
@@ -184,7 +185,8 @@ fn resolve_curse(
     };
     Ok(ResolvedMod {
         default: meta.default.unwrap_or(true),
-        filename: file_response.file_name.clone(),
+        encoded: encode(&file_response.file_name).into_owned(),
+        filename: file_response.file_name,
         src: file_response.download_url,
         md5: md5hash,
         side: meta.side,
@@ -192,7 +194,6 @@ fn resolve_curse(
         name: mod_response.slug,
         size: file_data.len() as u64,
         sha256: sha256hash,
-        encoded: file_response.file_name,
         required: meta.required.unwrap_or(true),
     })
 }
@@ -252,8 +253,8 @@ fn resolve_modrinth(
         side: meta.side,
         required: meta.required.unwrap_or(true),
         default: meta.default.unwrap_or(true),
+        encoded: encode(&primary_file.filename).into_owned(),
         filename: primary_file.filename.clone(),
-        encoded: primary_file.filename.clone(),
         src: primary_file.url.clone(),
         size: primary_file.size,
         md5: md5hash,
@@ -277,8 +278,8 @@ fn resolve_url(location: String, filename: Option<String>, meta: ModDefinitionFi
         side: meta.side,
         required: meta.required.unwrap_or(true),
         default: meta.default.unwrap_or(true),
-        filename: resolved_filename.clone(),
-        encoded: resolved_filename,
+        encoded: encode(&resolved_filename).into_owned(),
+        filename: resolved_filename,
         src: location,
         size: file_data.len() as u64,
         md5: md5hash,
