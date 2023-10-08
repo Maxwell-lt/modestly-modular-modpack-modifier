@@ -10,6 +10,7 @@ use api_client::{
 };
 use digest::Digest;
 use md5::Md5;
+use rayon::prelude::*;
 use serde::Deserialize;
 use sha2::Sha256;
 use thiserror::Error;
@@ -77,7 +78,7 @@ impl NodeConfig for ModResolver {
             }
 
             let resolved: Vec<ResolvedMod> = mods
-                .into_iter()
+                .into_par_iter()
                 .map(|mod_def| match mod_def {
                     ModDefinition::Modrinth { id, file_id, fields } => {
                         resolve_modrinth(&modrinth_client, id, file_id, fields, &minecraft_version, &modloader)
@@ -341,6 +342,8 @@ mod tests {
         let curse_config = get_curse_config();
         if let Ok(ref c) = curse_config {
             ctx_builder = ctx_builder.curse_client_key(&c.curse_api_key);
+        } else {
+            ctx_builder = ctx_builder.curse_client_proxy("https://api.curse.tools/v1/cf")
         }
         let mut ctx = ctx_builder
             .channel_from_node(node.generate_channels(node_id))
@@ -370,10 +373,6 @@ mod tests {
         "#,
         )
         .unwrap();
-        // If no mmmm.toml with an API key is present, skip this test.
-        if curse_config.is_err() {
-            return;
-        }
 
         let handle = node.validate_and_spawn(node_id.into(), &input_ids, &ctx).unwrap();
 

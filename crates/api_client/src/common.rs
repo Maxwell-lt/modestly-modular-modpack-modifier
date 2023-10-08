@@ -61,7 +61,10 @@ pub struct ApiClientBuilder {
 }
 
 impl ApiClientBuilder {
+    const MAX_BURST: u64 = 30;
+
     pub fn new(requests_per_minute: u64, base_url: String) -> ApiClientBuilder {
+        assert!(requests_per_minute > 0, "Non-zero value required for requests_per_minute!");
         ApiClientBuilder {
             requests_per_minute,
             base_url,
@@ -75,15 +78,17 @@ impl ApiClientBuilder {
     }
 
     pub fn build(self) -> ApiClient {
+        let ms_between_tokens: u64 = 60_000 / self.requests_per_minute;
         // Unwrap: The two scenarios in which .build() returns Err are:
         // 1. max_tokens < refill_amount
-        // Not possible: both values are equal (set to requests_per_minute)
+        // Not possible: max_tokens is hardcoded to 30, refill_amount to 1
         // 2. refill_interval > u64::MAX nanoseconds
-        // Not possible: refill_interval is hardcoded to 60 seconds (6e10ns < 1.8e19ns)
+        // Not possible: refill_interval calculated by dividing constant by u64, largest possible
+        // value (at requests_per_minute = 1) is 60 seconds (6e10ns < 1.8e19ns)
         // Therefore, this is effectively infallible.
-        let ratelimit = Ratelimiter::builder(self.requests_per_minute, Duration::from_secs(60))
-            .max_tokens(self.requests_per_minute)
-            .initial_available(self.requests_per_minute)
+        let ratelimit = Ratelimiter::builder(1, Duration::from_millis(ms_between_tokens))
+            .max_tokens(Self::MAX_BURST)
+            .initial_available(Self::MAX_BURST)
             .build()
             .unwrap();
         let client_builder = self.agent_builder.timeout(Duration::from_secs(60));

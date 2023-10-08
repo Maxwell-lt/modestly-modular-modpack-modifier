@@ -18,7 +18,7 @@ With Nix Flakes enabled, run
 
 [source,console]
 ----
-$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.4.0 -- ./pack-manifest.yml
+$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.4.1 -- ./pack-manifest.yml
 ----
 
 Optionally, the paths where output files should be saved can be specified with `-o /path/to/output` or `--output-dir /path/to/output`.

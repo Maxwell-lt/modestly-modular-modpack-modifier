@@ -25,8 +25,8 @@ impl CurseClient {
     /// Get a [`CurseClient`] that uses the official CurseForge API.
     pub fn from_key(key: String) -> Self {
         CurseClient {
-            // Curseforge does not document any rate limit, trying 1000/min for now
-            client: ApiClientBuilder::new(1000, CURSEFORGE_BASE_URL.to_owned())
+            // Curseforge does not document any rate limit, trying 600/min for now
+            client: ApiClientBuilder::new(600, CURSEFORGE_BASE_URL.to_owned())
                 .add_middleware(ApiKeyMiddleware(key))
                 .build(),
         }
