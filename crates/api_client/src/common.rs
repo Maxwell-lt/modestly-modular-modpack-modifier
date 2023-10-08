@@ -119,7 +119,14 @@ impl ApiClient {
         let mut retries = 2;
         loop {
             self.wait_for_token();
-            match self.inner.client.get(&self.build_url(path)).query_pairs(params.clone()).call().map_err(Box::new) {
+            match self
+                .inner
+                .client
+                .get(&self.build_url(path))
+                .query_pairs(params.clone())
+                .call()
+                .map_err(Box::new)
+            {
                 Ok(response) => return Ok(response),
                 Err(err) => {
                     if retries > 0 {

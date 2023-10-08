@@ -61,7 +61,7 @@ impl NodeConfig for ArchiveDownloader {
                 }
             }
 
-            if let Err(_) = out_channel.send(filetree) {
+            if out_channel.send(filetree).is_err() {
                 event!(Level::DEBUG, "Channel 'default' has no subscribers");
             }
         }))

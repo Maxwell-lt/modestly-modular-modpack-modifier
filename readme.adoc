@@ -3,13 +3,14 @@
 :toc:
 :toclevels: 3
 
-WIP attempt at building a successor to https://github.com/Erisia/cursetool-rs[Erisia/cursetool-rs].
+Successor to https://github.com/Erisia/cursetool-rs[Erisia/cursetool-rs].
 
 While cursetool only supports conversion of a human-writable manifest into the Nix file used by https://github.com/Erisia/builder[Erisia/builder],
 this tool aims to be a full-service modpack builder, allowing workflows to be defined which will pull a pack from Curse/Modrinth/etc., edit mod lists,
 patch config files, output a Nix manifest and static pack files, and more.
 
-Workflows will be YAML files that define a DAG of operations to be done, and the connections between each operation. See `design.adoc` for vague ideas on how this will be accomplished.
+While the core functionality of resolving human-readable mod lists into a https://github.com/Erisia/builder[Erisia/builder] readable manifest has been implemented (and expanded to support both Curse and Modrinth),
+the other capabilities are still in progress.
 
 == Usage
 
@@ -17,17 +18,19 @@ With Nix Flakes enabled, run
 
 [source,console]
 ----
-$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.3.0 -- ./pack-manifest.yml
+$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.4.0 -- ./pack-manifest.yml
 ----
 
-Optionally, the paths where output files should be saved can be specified with `-o /path/to/output` or `--output-dir /path/to/output`,
-and the directory where a `mmmm.toml` configuration file is located can be specified with `-c /path/to/config` or `--config-dir /path/to/config`.
-If not specified, the current directory will be used.
+Optionally, the paths where output files should be saved can be specified with `-o /path/to/output` or `--output-dir /path/to/output`.
+The directory used for the config file (defaults to the platform-specific user config directory) can be overridden with `-c /path/to/config` or `--config-dir /path/to/config`.
 
 [#config-file-sidebar,reftext="Config File Format"]
 .Config File Format
 ****
-The config file must be named `mmmm.toml`, and should be present in the specified configuration directory if certain features are required.
+The configuration file `mmmm.toml` will be read from `$XDG_CONFIG_HOME/modestly-modular-modpack-modifier` or `~/.config/modestly-modular-modpack-modifier`
+on Linux, and `%AppData%\maxwell-lt\modestly-modular-modpack-modifier\config` on Windows.
+
+For access to the Curse API, one of the following keys must be set in the configuration file.
 
 .Curse API (set one of two)
 * `curse_api_key`

@@ -16,4 +16,5 @@ tracing-error = "0.2.0"
 tracing-indicatif = "0.3.5"
 indicatif = "0.17.7"
 tokio = { version = "1.31", default-features = false, features = ["sync"] }
+directories = "5.0.1"
 mmmm_core = { path = "../mmmm_core" }

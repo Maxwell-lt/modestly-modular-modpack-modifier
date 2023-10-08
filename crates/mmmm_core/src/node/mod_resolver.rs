@@ -108,10 +108,10 @@ impl NodeConfig for ModResolver {
 
             let json_file = serde_json::to_string_pretty(&resolved).expect_or_log("Serialization of resolved mods to JSON failed");
 
-            if let Err(_) = out_channel.send(nix_file) {
+            if out_channel.send(nix_file).is_err() {
                 event!(Level::DEBUG, "Channel 'default' has no subscribers");
             }
-            if let Err(_) = json_out.send(json_file) {
+            if json_out.send(json_file).is_err() {
                 event!(Level::DEBUG, "Channel 'json' has no subscribers");
             }
         }))

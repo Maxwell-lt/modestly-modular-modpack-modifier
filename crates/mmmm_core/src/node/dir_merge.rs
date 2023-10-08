@@ -55,7 +55,7 @@ impl NodeConfig for DirectoryMerger {
                     res
                 })
                 .expect_or_log(&format!("No inputs passed to DirectoryMerger node with ID {node_id}"));
-            if let Err(_) = output_channel.send(output_dir) {
+            if output_channel.send(output_dir).is_err() {
                 event!(Level::DEBUG, "Channel 'default' has no subscribers");
             }
         }))

@@ -41,10 +41,10 @@ impl NodeConfig for FileFilter {
 
             let (output_filetree, inverse_filetree) = source_filetree.filter_files(&pattern);
 
-            if let Err(_) = out_channel.send(output_filetree) {
+            if out_channel.send(output_filetree).is_err() {
                 event!(Level::DEBUG, "Channel 'default' has no subscribers");
             }
-            if let Err(_) = inverse_channel.send(inverse_filetree) {
+            if inverse_channel.send(inverse_filetree).is_err() {
                 event!(Level::DEBUG, "Channel 'inverse' has no subscribers");
             }
         }))

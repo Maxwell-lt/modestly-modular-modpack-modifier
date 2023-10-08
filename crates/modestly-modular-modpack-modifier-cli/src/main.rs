@@ -2,11 +2,13 @@ use std::{fs, io::Write, path::PathBuf, thread, time::Duration};
 
 use clap::Parser;
 use color_eyre::{
-    eyre::{Context, Result},
+    eyre::{eyre, Context, Result},
     Section,
 };
+use directories::ProjectDirs;
 use mmmm_core::orch::MMMMConfig;
 use tokio::sync::broadcast::error::TryRecvError;
+use tracing::{event, span, Level};
 use tracing_error::ErrorLayer;
 use tracing_indicatif::{writer::get_indicatif_stderr_writer, IndicatifLayer};
 use tracing_subscriber::{filter::LevelFilter, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer};
@@ -26,15 +28,9 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
     let pack_def = fs::read_to_string(&args.definition)
-        .wrap_err_with(|| format!("Failed to read pack definition YAML from {}", args.definition.to_string_lossy()))
+        .wrap_err_with(|| format!("Failed to read pack definition YAML from {}", args.definition.display()))
         .suggestion("Provide a valid path to a pack definition YAML file")?;
-    let global_config: MMMMConfig = fs::read_to_string(match args.config_dir {
-        Some(dir) => dir.join("mmmm.toml"),
-        None => "mmmm.toml".into(),
-    })
-    .ok()
-    .and_then(|s| toml::from_str(s.as_ref()).ok())
-    .unwrap_or_default();
+    let global_config: MMMMConfig = get_config(args.config_dir)?;
     let mut graph = mmmm_core::orch::build_graph(&pack_def, global_config)
         .wrap_err("Failed to construct node graph")
         .suggestion("Confirm that the pack definition is valid")?;
@@ -65,12 +61,12 @@ fn main() -> Result<()> {
         file_outputs.retain_mut(|channel| match channel.1.try_recv() {
             Ok(data) => {
                 let out_path = output_dir.join::<PathBuf>(channel.0.clone().into());
-                println!("Output ready, writing to {}", out_path.to_string_lossy());
+                println!("Output ready, writing to {}", out_path.display());
                 fs::write(&out_path, data)
-                    .wrap_err(format!("Could not write to file {}", out_path.to_string_lossy()))
+                    .wrap_err(format!("Could not write to file {}", out_path.display()))
                     .suggestion("Ensure the parent directory exists, and that the current user has write access to it")
                     .unwrap();
-                println!("Finished writing to {}", out_path.to_string_lossy());
+                println!("Finished writing to {}", out_path.display());
                 false
             },
             Err(TryRecvError::Closed) => false,
@@ -80,21 +76,16 @@ fn main() -> Result<()> {
         zip_outputs.retain_mut(|channel| match channel.1.try_recv() {
             Ok(data) => {
                 let out_path = output_dir.join::<PathBuf>(channel.0.clone().into()).with_extension("zip");
-                writeln!(
-                    get_indicatif_stderr_writer().unwrap(),
-                    "Output ready, writing to {}",
-                    out_path.to_string_lossy()
-                )
-                .unwrap();
+                writeln!(get_indicatif_stderr_writer().unwrap(), "Output ready, writing to {}", out_path.display()).unwrap();
                 let mut out_file = fs::File::create(&out_path)
-                    .wrap_err(format!("Could not write to file {}", out_path.to_string_lossy()))
+                    .wrap_err(format!("Could not write to file {}", out_path.display()))
                     .suggestion("Ensure the parent directory exists, and that the current user has write access to it")
                     .unwrap();
                 let bytes = data.zip(&mut out_file).wrap_err("Failed to write to file buffer").unwrap();
                 writeln!(
                     get_indicatif_stderr_writer().unwrap(),
                     "Finished writing to {}. Wrote {} bytes.",
-                    out_path.to_string_lossy(),
+                    out_path.display(),
                     bytes
                 )
                 .unwrap();
@@ -114,6 +105,35 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn get_config(override_dir: Option<PathBuf>) -> Result<MMMMConfig> {
+    let _span = span!(Level::DEBUG, "get_config").entered();
+    if let Some(dir) = override_dir {
+        event!(Level::INFO, "Loading mmmm.toml from user-provided directory");
+        let data = fs::read_to_string(dir.join("mmmm.toml"))
+            .wrap_err("Failed to read from config file")
+            .with_suggestion(|| format!("Ensure that the file {}/mmmm.toml exists and is readable.", dir.display()))?;
+        return toml::from_str(&data).wrap_err("Failed to parse config file");
+    }
+    let project_dirs =
+        ProjectDirs::from("dev", "maxwell-lt", "modestly-modular-modpack-modifier").ok_or_else(|| eyre!("Could not find user config directory!"))?;
+    let config_dir = project_dirs.config_dir();
+    let config_path = config_dir.join("mmmm.toml");
+    let data = fs::read_to_string(&config_path);
+    match data {
+        Ok(config_contents) => {
+            event!(Level::INFO, "Loading mmmm.toml from user config directory");
+            toml::from_str(&config_contents).wrap_err("Failed to parse config file")
+        },
+        Err(_) => {
+            event!(Level::INFO, "Creating example mmmm.toml in user config directory");
+            fs::create_dir_all(config_dir).wrap_err_with(|| format!("Failed to initialize config directory {}", config_dir.display()))?;
+            fs::write(&config_path, "# Set one of these keys to enable the Curse client\n# Curse API key from https://console.curseforge.com/#/api-keys\n#curse_api_key = \"\"\n# Base URL of a Curse API proxy service\n#curse_proxy_url = \"\"").wrap_err_with(|| format!("Failed to write example config file to {}", config_path.display()))?;
+
+            Ok(MMMMConfig::default())
+        },
+    }
+}
+
 /// CLI frontend for Modestly Modular Modpack Modifier
 ///
 /// Build modpacks by declaring a graph of processing nodes
@@ -125,7 +145,10 @@ struct Args {
     /// Directory where output files should be written. Default is current directory.
     #[arg(short, long)]
     output_dir: Option<PathBuf>,
-    /// Directory where configurations files should be stored. Default is current directory.
+    /// Directory where the configuration file is located.
+    /// Default on Linux is $XDG_CONFIG_HOME/modestly-modular-modpack-modifier or
+    /// $HOME/.config/modestly-modular-modpack-modifier.
+    /// Default on Windows is %AppData%\maxwell-lt\modestly-modular-modpack-modifier\config.
     #[arg(short, long)]
     config_dir: Option<PathBuf>,
 }
