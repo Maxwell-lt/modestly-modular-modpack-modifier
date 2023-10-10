@@ -18,11 +18,14 @@ With Nix Flakes enabled, run
 
 [source,console]
 ----
-$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.4.1 -- ./pack-manifest.yml
+$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.5.0 -- ./pack-manifest.yml
 ----
 
 Optionally, the paths where output files should be saved can be specified with `-o /path/to/output` or `--output-dir /path/to/output`.
 The directory used for the config file (defaults to the platform-specific user config directory) can be overridden with `-c /path/to/config` or `--config-dir /path/to/config`.
+
+Mod resolution data is persistently cached for performance, which may cause the tool to pick up old versions of mods that are specified without a file ID.
+To clear the cache and ensure the newest versions of unpinned mods are retrieved, run with the flag `--clear-cache`.
 
 [#config-file-sidebar,reftext="Config File Format"]
 .Config File Format

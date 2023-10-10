@@ -1,11 +1,12 @@
 use api_client::{curse::CurseClient, modrinth::ModrinthClient};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 use tokio::sync::broadcast::{self, error::SendError};
 
 use crate::{
     file::{filestore::FileStore, filetree::FileTree},
     node::config::{ChannelId, ModDefinition},
+    Cache,
 };
 
 /// Holds references to shared resources required by nodes, and coordinates nodes.
@@ -41,6 +42,8 @@ pub struct DiContainer {
     // Modrinth API client
     // The Modrinth API does not require an API key, so one can always be created.
     modrinth_client: ModrinthClient,
+    // Cache
+    cache: Option<Arc<dyn Cache>>,
 }
 
 #[derive(Debug, Clone)]
@@ -151,6 +154,10 @@ impl DiContainer {
     pub fn get_config(&self, key: &str) -> Option<String> {
         self.configs.get(key).cloned()
     }
+
+    pub fn get_cache(&self) -> Option<Arc<dyn Cache>> {
+        self.cache.clone()
+    }
 }
 
 /// Builder for the [`DiContainer`], allowing for channels and API configuration to be set
@@ -160,6 +167,7 @@ pub struct DiContainerBuilder {
     channels: HashMap<ChannelId, InputType>,
     curse_client: Option<CurseClient>,
     configs: HashMap<String, String>,
+    cache: Option<Box<dyn Cache>>,
 }
 
 impl DiContainerBuilder {
@@ -186,6 +194,11 @@ impl DiContainerBuilder {
         self
     }
 
+    pub fn set_cache(mut self, cache: Box<dyn Cache>) -> Self {
+        let _ = self.cache.insert(cache);
+        self
+    }
+
     /// Construct the [`DiContainer`].
     pub fn build(self) -> DiContainer {
         DiContainer {
@@ -196,6 +209,7 @@ impl DiContainerBuilder {
             curse_client: self.curse_client,
             modrinth_client: ModrinthClient::new(),
             configs: self.configs,
+            cache: self.cache.map(Arc::from),
         }
     }
 }

@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::node::{
-    config::{NodeConfig, NodeConfigEntry, NodeInitError, PackDefinition},
-    source::Source,
+use crate::{
+    node::{
+        config::{NodeConfig, NodeConfigEntry, NodeInitError, PackDefinition},
+        source::Source,
+    },
+    Cache,
 };
 
 use super::container::{DiContainer, DiContainerBuilder, OutputType, WakeError};
@@ -33,7 +36,7 @@ pub struct Graph {
     pub outputs: HashMap<String, OutputType>,
 }
 
-pub fn build_graph(pack_definition: &str, global_config: MMMMConfig) -> Result<Graph, BuildGraphError> {
+pub fn build_graph(pack_definition: &str, global_config: MMMMConfig, cache: Option<Box<dyn Cache>>) -> Result<Graph, BuildGraphError> {
     let pack = serde_yaml::from_str::<PackDefinition>(pack_definition).unwrap();
 
     // Separate out node types
@@ -74,6 +77,10 @@ pub fn build_graph(pack_definition: &str, global_config: MMMMConfig) -> Result<G
         .iter()
         .fold(ctx_builder, |cb, n| cb.channel_from_node(n.kind.generate_channels(&n.id)));
     ctx_builder = ctx_builder.channel_from_node(source_builder.generate_channels());
+
+    if let Some(c) = cache {
+        ctx_builder = ctx_builder.set_cache(c);
+    }
 
     // Setup Curse API client if global config specifies the required parameters
     ctx_builder = if let Some(key) = global_config.curse_api_key {
@@ -164,7 +171,7 @@ nodes:
             curse_proxy_url: Some("https://api.curse.tools/v1/cf".into()),
             curse_api_key: None,
         };
-        let mut graph = build_graph(mod_config, global_config).unwrap();
+        let mut graph = build_graph(mod_config, global_config, None).unwrap();
         graph.context.run().unwrap();
 
         let manifest_channel = if let OutputType::Text(channel) = graph.outputs.get_mut("manifest.nix").unwrap() {

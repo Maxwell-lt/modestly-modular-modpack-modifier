@@ -3,7 +3,10 @@ use std::{collections::HashMap, fmt::Display, str::FromStr, thread::JoinHandle};
 use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver};
 use crate::di::container::{DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
-use serde::{de, Deserialize, Serialize};
+use serde::{
+    de::{self},
+    Deserialize, Serialize,
+};
 use thiserror::Error;
 
 #[enum_dispatch]
@@ -11,6 +14,17 @@ pub trait NodeConfig {
     fn validate_and_spawn(&self, node_id: String, input_ids: &HashMap<String, ChannelId>, ctx: &DiContainer)
         -> Result<JoinHandle<()>, NodeInitError>;
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType>;
+}
+
+pub trait Cache: Send + Sync {
+    fn put(&self, namespace: &str, key: &str, data: &str) -> Result<(), CacheError>;
+    fn get(&self, namespace: &str, key: &str) -> Result<Option<String>, CacheError>;
+}
+
+#[derive(Debug, Error)]
+#[error("Error accessing the cache: {msg}")]
+pub struct CacheError {
+    pub msg: String,
 }
 
 #[derive(Debug, Error)]

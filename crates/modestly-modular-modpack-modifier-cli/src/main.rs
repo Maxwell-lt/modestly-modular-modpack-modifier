@@ -1,5 +1,6 @@
 use std::{fs, io::Write, path::PathBuf, thread, time::Duration};
 
+use cache::SqliteCache;
 use clap::Parser;
 use color_eyre::{
     eyre::{eyre, Context, Result},
@@ -12,6 +13,8 @@ use tracing::{event, span, Level};
 use tracing_error::ErrorLayer;
 use tracing_indicatif::{writer::get_indicatif_stderr_writer, IndicatifLayer};
 use tracing_subscriber::{filter::LevelFilter, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer};
+
+mod cache;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
@@ -31,7 +34,10 @@ fn main() -> Result<()> {
         .wrap_err_with(|| format!("Failed to read pack definition YAML from {}", args.definition.display()))
         .suggestion("Provide a valid path to a pack definition YAML file")?;
     let global_config: MMMMConfig = get_config(args.config_dir)?;
-    let mut graph = mmmm_core::orch::build_graph(&pack_def, global_config)
+    let project_dirs = get_project_dirs()?;
+    let cache_dir = project_dirs.cache_dir();
+    let cache = SqliteCache::new(cache_dir, args.clear_cache)?;
+    let mut graph = mmmm_core::orch::build_graph(&pack_def, global_config, Some(Box::new(cache)))
         .wrap_err("Failed to construct node graph")
         .suggestion("Confirm that the pack definition is valid")?;
     graph
@@ -114,8 +120,7 @@ fn get_config(override_dir: Option<PathBuf>) -> Result<MMMMConfig> {
             .with_suggestion(|| format!("Ensure that the file {}/mmmm.toml exists and is readable.", dir.display()))?;
         return toml::from_str(&data).wrap_err("Failed to parse config file");
     }
-    let project_dirs =
-        ProjectDirs::from("dev", "maxwell-lt", "modestly-modular-modpack-modifier").ok_or_else(|| eyre!("Could not find user config directory!"))?;
+    let project_dirs = get_project_dirs()?;
     let config_dir = project_dirs.config_dir();
     let config_path = config_dir.join("mmmm.toml");
     let data = fs::read_to_string(&config_path);
@@ -132,6 +137,10 @@ fn get_config(override_dir: Option<PathBuf>) -> Result<MMMMConfig> {
             Ok(MMMMConfig::default())
         },
     }
+}
+
+fn get_project_dirs() -> Result<ProjectDirs> {
+    ProjectDirs::from("dev", "maxwell-lt", "modestly-modular-modpack-modifier").ok_or_else(|| eyre!("Could not find user config directory!"))
 }
 
 /// CLI frontend for Modestly Modular Modpack Modifier
@@ -151,4 +160,7 @@ struct Args {
     /// Default on Windows is %AppData%\maxwell-lt\modestly-modular-modpack-modifier\config.
     #[arg(short, long)]
     config_dir: Option<PathBuf>,
+    /// Clear all cached data before running.
+    #[arg(long)]
+    clear_cache: bool,
 }

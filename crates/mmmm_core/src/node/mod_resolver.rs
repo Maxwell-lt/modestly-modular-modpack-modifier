@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    sync::Arc,
     thread::{spawn, JoinHandle},
 };
 
@@ -19,7 +20,10 @@ use tracing::{event, span, Level};
 use tracing_unwrap::ResultExt;
 use urlencoding::encode;
 
-use crate::di::container::{DiContainer, InputType, OutputType};
+use crate::{
+    di::container::{DiContainer, InputType, OutputType},
+    Cache, CacheError,
+};
 
 use super::{
     config::{ChannelId, ModDefinition, ModDefinitionFields, NodeConfig, NodeInitError, ResolvedMod},
@@ -51,6 +55,7 @@ impl NodeConfig for ModResolver {
 
         let curse_client_option = ctx.get_curse_client();
         let modrinth_client = ctx.get_modrinth_client();
+        let cache = ctx.get_cache();
         Ok(spawn(move || {
             let _span = span!(Level::INFO, "ModResolver", nodeid = node_id).entered();
             if !waker.blocking_recv().unwrap_or_log() {
@@ -81,15 +86,21 @@ impl NodeConfig for ModResolver {
                 .into_par_iter()
                 .map(|mod_def| match mod_def {
                     ModDefinition::Modrinth { id, file_id, fields } => {
-                        resolve_modrinth(&modrinth_client, id, file_id, fields, &minecraft_version, &modloader)
+                        resolve_modrinth(&modrinth_client, id, file_id, fields, &minecraft_version, &modloader, &cache)
                             .expect_or_log("Failed to resolve Modrinth mod")
                     },
-                    ModDefinition::Curse { id, file_id, fields } => {
-                        resolve_curse(curse_client_option.as_ref().unwrap(), id, file_id, fields, &minecraft_version, &modloader)
-                            .expect_or_log("Failed to resolve Curse mod")
-                    },
+                    ModDefinition::Curse { id, file_id, fields } => resolve_curse(
+                        curse_client_option.as_ref().unwrap(),
+                        id,
+                        file_id,
+                        fields,
+                        &minecraft_version,
+                        &modloader,
+                        &cache,
+                    )
+                    .expect_or_log("Failed to resolve Curse mod"),
                     ModDefinition::Url { location, filename, fields } => {
-                        resolve_url(location, filename, fields).expect_or_log("Failed to resolve URL mod")
+                        resolve_url(location, filename, fields, &cache).expect_or_log("Failed to resolve URL mod")
                     },
                 })
                 .collect();
@@ -134,7 +145,54 @@ enum ResolveError {
     Download(#[from] DownloadError),
     #[error("Missing data when: '{0}'!")]
     EmptyOption(String),
+    #[error("Cache interaction failed! Error: {0}")]
+    Cache(#[from] CacheError),
+    #[error("Failed to deserialize cached data! Error: {0}")]
+    CacheDeserialize(#[from] serde_json::Error),
 }
+
+struct CacheKey<'a> {
+    name: &'a str,
+    id: &'a str,
+    version: Option<(&'a str, &'a str)>,
+}
+
+impl ToString for CacheKey<'_> {
+    fn to_string(&self) -> String {
+        match self.version {
+            Some(version) => format!("{}::{}::{}+{}", self.name, self.id, version.0, version.1),
+            None => format!("{}::{}", self.name, self.id),
+        }
+    }
+}
+
+fn get_from_cache(cache: &Option<Arc<dyn Cache>>, namespace: &str, key: &CacheKey) -> Result<Option<ResolvedMod>, ResolveError> {
+    match cache {
+        Some(cache) => {
+            let cache_data = cache.get(namespace, &key.to_string())?;
+            match cache_data {
+                Some(cache_data) => Ok(serde_json::from_str(&cache_data)?),
+                None => Ok(None),
+            }
+        },
+        None => Ok(None),
+    }
+}
+
+fn store_in_cache(cache: &Option<Arc<dyn Cache>>, namespace: &str, key: &CacheKey, value: &ResolvedMod) -> Result<(), ResolveError> {
+    match cache {
+        Some(cache) => {
+            let serialized = serde_json::to_string(value)?;
+            cache.put(namespace, &key.to_string(), &serialized)?;
+            Ok(())
+        },
+        None => Ok(()),
+    }
+}
+
+const CURSE_CACHE_NAMESPACE: &str = "ModResolver::Curse";
+const MODRINTH_CACHE_NAMESPACE: &str = "ModResolver::Modrinth";
+const URL_CACHE_NAMESPACE: &str = "ModResolver::URL";
 
 fn resolve_curse(
     client: &CurseClient,
@@ -143,9 +201,18 @@ fn resolve_curse(
     meta: ModDefinitionFields,
     mcversion: &str,
     loader: &str,
+    cache: &Option<Arc<dyn Cache>>,
 ) -> Result<ResolvedMod, ResolveError> {
     let name = meta.name.clone();
     let _span = span!(Level::INFO, "Curse", mod_name = name).entered();
+    let cache_key = CacheKey {
+        name: &name,
+        id: &file_id.unwrap_or_default().to_string(),
+        version: Some((&mcversion, &loader)),
+    };
+    if let Some(cached) = get_from_cache(cache, CURSE_CACHE_NAMESPACE, &cache_key)? {
+        return Ok(cached);
+    }
     let (mod_response, file_response, file_data) = if let Some(id) = file_id {
         let file_response = client
             .get_files(&[id])?
@@ -180,7 +247,7 @@ fn resolve_curse(
             None => md5hash(&file_data),
         }
     };
-    Ok(ResolvedMod {
+    let resolved = ResolvedMod {
         default: meta.default.unwrap_or(true),
         encoded: encode(&file_response.file_name).into_owned(),
         filename: file_response.file_name,
@@ -192,7 +259,9 @@ fn resolve_curse(
         size: file_data.len() as u64,
         sha256: sha256hash,
         required: meta.required.unwrap_or(true),
-    })
+    };
+    store_in_cache(cache, CURSE_CACHE_NAMESPACE, &cache_key, &resolved)?;
+    Ok(resolved)
 }
 
 // CF has an awesome API where modloader type is a first-class field. Oh wait, that's Modrinth...
@@ -215,11 +284,20 @@ fn resolve_modrinth(
     meta: ModDefinitionFields,
     mcversion: &str,
     loader: &str,
+    cache: &Option<Arc<dyn Cache>>,
 ) -> Result<ResolvedMod, ResolveError> {
     let name = meta.name.clone();
     let _span = span!(Level::INFO, "Modrinth", mod_name = name).entered();
-    let (mod_response, file_response) = if let Some(id) = file_id {
-        let file_response = client.get_version(&id)?;
+    let cache_key = CacheKey {
+        name: &name,
+        id: &file_id.clone().unwrap_or_default(),
+        version: Some((&mcversion, &loader)),
+    };
+    if let Some(cached) = get_from_cache(cache, MODRINTH_CACHE_NAMESPACE, &cache_key)? {
+        return Ok(cached);
+    }
+    let (mod_response, file_response) = if let Some(ref id) = file_id {
+        let file_response = client.get_version(id)?;
         let mod_response = client.get_mod_info(&file_response.project_id)?;
         (mod_response, file_response)
     } else {
@@ -244,7 +322,7 @@ fn resolve_modrinth(
     let file_data = download_file(&primary_file.url)?;
     let sha256hash = sha256hash(&file_data);
     let md5hash = md5hash(&file_data);
-    Ok(ResolvedMod {
+    let resolved = ResolvedMod {
         name: mod_response.slug,
         title: mod_response.title,
         side: meta.side,
@@ -256,12 +334,27 @@ fn resolve_modrinth(
         size: primary_file.size,
         md5: md5hash,
         sha256: sha256hash,
-    })
+    };
+    store_in_cache(cache, MODRINTH_CACHE_NAMESPACE, &cache_key, &resolved)?;
+    Ok(resolved)
 }
 
-fn resolve_url(location: String, filename: Option<String>, meta: ModDefinitionFields) -> Result<ResolvedMod, ResolveError> {
+fn resolve_url(
+    location: String,
+    filename: Option<String>,
+    meta: ModDefinitionFields,
+    cache: &Option<Arc<dyn Cache>>,
+) -> Result<ResolvedMod, ResolveError> {
     let name = meta.name.clone();
     let _span = span!(Level::INFO, "URL", mod_name = name).entered();
+    let cache_key = CacheKey {
+        name: &name,
+        id: &location,
+        version: None,
+    };
+    if let Some(cached) = get_from_cache(cache, URL_CACHE_NAMESPACE, &cache_key)? {
+        return Ok(cached);
+    }
     let file_data = download_file(&location)?;
     let resolved_filename = match filename {
         Some(value) => value,
@@ -269,7 +362,7 @@ fn resolve_url(location: String, filename: Option<String>, meta: ModDefinitionFi
     };
     let md5hash = md5hash(&file_data);
     let sha256hash = sha256hash(&file_data);
-    Ok(ResolvedMod {
+    let resolved = ResolvedMod {
         name: meta.name.clone(),
         title: meta.name,
         side: meta.side,
@@ -277,11 +370,13 @@ fn resolve_url(location: String, filename: Option<String>, meta: ModDefinitionFi
         default: meta.default.unwrap_or(true),
         encoded: encode(&resolved_filename).into_owned(),
         filename: resolved_filename,
-        src: location,
+        src: location.clone(),
         size: file_data.len() as u64,
         md5: md5hash,
         sha256: sha256hash,
-    })
+    };
+    store_in_cache(cache, URL_CACHE_NAMESPACE, &cache_key, &resolved)?;
+    Ok(resolved)
 }
 
 fn sha256hash<T>(data: T) -> String
