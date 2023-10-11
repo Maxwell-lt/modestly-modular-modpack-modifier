@@ -166,12 +166,25 @@ impl ToString for CacheKey<'_> {
     }
 }
 
-fn get_from_cache(cache: &Option<Arc<dyn Cache>>, namespace: &str, key: &CacheKey) -> Result<Option<ResolvedMod>, ResolveError> {
+fn get_from_cache(
+    cache: &Option<Arc<dyn Cache>>,
+    namespace: &str,
+    key: &CacheKey,
+    merge_meta: &ModDefinitionFields,
+) -> Result<Option<ResolvedMod>, ResolveError> {
     match cache {
         Some(cache) => {
             let cache_data = cache.get(namespace, &key.to_string())?;
             match cache_data {
-                Some(cache_data) => Ok(serde_json::from_str(&cache_data)?),
+                Some(cache_data) => {
+                    let mut resolved: Option<ResolvedMod> = serde_json::from_str(&cache_data)?;
+                    if let Some(ref mut resolved) = resolved {
+                        resolved.side = merge_meta.side;
+                        resolved.default = merge_meta.default.unwrap_or(true);
+                        resolved.required = merge_meta.required.unwrap_or(true);
+                    }
+                    Ok(resolved)
+                },
                 None => Ok(None),
             }
         },
@@ -210,7 +223,7 @@ fn resolve_curse(
         id: &file_id.unwrap_or_default().to_string(),
         version: Some((&mcversion, &loader)),
     };
-    if let Some(cached) = get_from_cache(cache, CURSE_CACHE_NAMESPACE, &cache_key)? {
+    if let Some(cached) = get_from_cache(cache, CURSE_CACHE_NAMESPACE, &cache_key, &meta)? {
         return Ok(cached);
     }
     let (mod_response, file_response, file_data) = if let Some(id) = file_id {
@@ -293,7 +306,7 @@ fn resolve_modrinth(
         id: &file_id.clone().unwrap_or_default(),
         version: Some((&mcversion, &loader)),
     };
-    if let Some(cached) = get_from_cache(cache, MODRINTH_CACHE_NAMESPACE, &cache_key)? {
+    if let Some(cached) = get_from_cache(cache, MODRINTH_CACHE_NAMESPACE, &cache_key, &meta)? {
         return Ok(cached);
     }
     let (mod_response, file_response) = if let Some(ref id) = file_id {
@@ -352,7 +365,7 @@ fn resolve_url(
         id: &location,
         version: None,
     };
-    if let Some(cached) = get_from_cache(cache, URL_CACHE_NAMESPACE, &cache_key)? {
+    if let Some(cached) = get_from_cache(cache, URL_CACHE_NAMESPACE, &cache_key, &meta)? {
         return Ok(cached);
     }
     let file_data = download_file(&location)?;
@@ -412,14 +425,14 @@ fn get_filename(url: &str) -> Result<String, ResolveError> {
 
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, time::Duration};
+    use std::{str::FromStr, sync::Mutex, time::Duration};
 
     use tokio::sync::broadcast;
 
     use crate::{
         di::container::DiContainerBuilder,
         node::{
-            config::{ModDefinition, NodeConfigTypes},
+            config::{ModDefinition, NodeConfigTypes, Side},
             utils::{get_curse_config, get_output_test, read_channel},
         },
     };
@@ -583,5 +596,131 @@ mod tests {
             get_filename("https://github.com/Maxwell-lt/TitleChanger/releases/download/1.1.3/titlechanger-1.1.3.jar?query=param").unwrap(),
             "titlechanger-1.1.3.jar"
         );
+    }
+
+    struct TestCache {
+        data: Arc<Mutex<HashMap<(String, String), String>>>,
+    }
+
+    impl Cache for TestCache {
+        fn put(&self, namespace: &str, key: &str, data: &str) -> Result<(), CacheError> {
+            self.data.lock().unwrap().insert((namespace.to_owned(), key.to_owned()), data.to_owned());
+            Ok(())
+        }
+
+        fn get(&self, namespace: &str, key: &str) -> Result<Option<String>, CacheError> {
+            Ok(self.data.lock().unwrap().get(&(namespace.to_owned(), key.to_owned())).map(|v| v.clone()))
+        }
+    }
+
+    #[test]
+    fn test_cache() {
+        let node_id = "resolver";
+        let mod_channel = broadcast::channel(1).0;
+        let input_ids = HashMap::from([("mods".into(), ChannelId::from_str("mod-source").unwrap())]);
+        let node = NodeConfigTypes::ModResolver(ModResolver);
+
+        let curse_mod = ResolvedMod {
+            name: "fake-mod".to_owned(),
+            title: "".to_owned(),
+            side: Side::Client,
+            required: false,
+            default: true,
+            filename: "".to_owned(),
+            encoded: "".to_owned(),
+            src: "".to_owned(),
+            size: 12345,
+            md5: "".to_owned(),
+            sha256: "".to_owned(),
+        };
+
+        let modrinth_mod = ResolvedMod {
+            name: "fake-mod-2".to_owned(),
+            title: "".to_owned(),
+            side: Side::Server,
+            required: false,
+            default: false,
+            filename: "".to_owned(),
+            encoded: "".to_owned(),
+            src: "".to_owned(),
+            size: 12345,
+            md5: "".to_owned(),
+            sha256: "".to_owned(),
+        };
+
+        let mods: Vec<ModDefinition> = vec![
+            ModDefinition::Curse {
+                id: None,
+                file_id: Some(12345),
+                fields: ModDefinitionFields {
+                    name: "fake-mod".to_owned(),
+                    side: Side::Both,
+                    required: Some(true),
+                    default: Some(true),
+                },
+            },
+            ModDefinition::Modrinth {
+                id: None,
+                file_id: Some("abcde".to_owned()),
+                fields: ModDefinitionFields {
+                    name: "fake-mod-2".to_owned(),
+                    side: Side::Server,
+                    required: Some(false),
+                    default: Some(true),
+                },
+            },
+        ];
+
+        let expected_resolved = {
+            let mut expected_curse = curse_mod.clone();
+            let mut expected_modrinth = modrinth_mod.clone();
+            expected_curse.side = Side::Both;
+            expected_curse.required = true;
+            expected_curse.default = true;
+
+            expected_modrinth.side = Side::Server;
+            expected_modrinth.required = false;
+            expected_modrinth.default = true;
+            vec![expected_curse, expected_modrinth]
+        };
+
+        let cache = TestCache {
+            data: Arc::new(Mutex::new(HashMap::from([
+                (
+                    ("ModResolver::Curse".to_owned(), "fake-mod::12345::1.12.2+forge".to_owned()),
+                    serde_json::to_string(&curse_mod).unwrap(),
+                ),
+                (
+                    ("ModResolver::Modrinth".to_owned(), "fake-mod-2::abcde::1.12.2+forge".to_owned()),
+                    serde_json::to_string(&modrinth_mod).unwrap(),
+                ),
+            ]))),
+        };
+
+        let mut ctx = DiContainerBuilder::default()
+            .channel_from_node(node.generate_channels(node_id))
+            .channel_from_node(HashMap::from([(
+                ChannelId::from_str("mod-source").unwrap(),
+                InputType::Mods(mod_channel.clone()),
+            )]))
+            .set_config("minecraft_version", "1.12.2")
+            .set_config("modloader", "forge")
+            .set_cache(Box::new(cache))
+            .curse_client_proxy("www.example.com/v1")
+            .build();
+
+        let mut json_out_channel = get_output_test!(ChannelId::from_str("resolver::json").unwrap(), Text, ctx);
+        let handle = node.validate_and_spawn(node_id.into(), &input_ids, &ctx).unwrap();
+
+        ctx.run().unwrap();
+        mod_channel.send(mods).unwrap();
+
+        handle.join().unwrap();
+        let timeout = Duration::from_secs(30);
+        let json_output: String = read_channel(&mut json_out_channel, timeout).unwrap();
+
+        let actual_resolved: Vec<ResolvedMod> = serde_json::from_str(&json_output).unwrap();
+
+        assert_eq!(actual_resolved, expected_resolved);
     }
 }

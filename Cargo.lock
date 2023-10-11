@@ -123,7 +123,7 @@ checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
 
 [[package]]
 name = "api_client"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "const_format",
  "lazy_static",
@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "mmmm_core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "api_client",
@@ -991,7 +991,7 @@ dependencies = [
 
 [[package]]
 name = "modestly-modular-modpack-modifier-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "clap 4.4.6",
  "color-eyre",
