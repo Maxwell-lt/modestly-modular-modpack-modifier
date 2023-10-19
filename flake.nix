@@ -39,7 +39,7 @@
 
 	defaultPackage = rustPlatform.buildRustPackage {
 	  pname = "modestly-modular-modpack-modifier";
-	  version = "0.5.1";
+	  version = "0.5.2";
 
 	  src = builtins.filterSource
 	    (path: type: type != "symlink" && baseNameOf path != "target")

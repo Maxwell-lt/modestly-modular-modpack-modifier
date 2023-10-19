@@ -7,7 +7,7 @@ authors.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ratelimit = "0.7.0"
+governor = "0.6.0"
 ureq = { version = "2.7", features = ["json"] }
 const_format = "0.2.31"
 serde = { version = ">=1.0.185", features = ["derive"] }

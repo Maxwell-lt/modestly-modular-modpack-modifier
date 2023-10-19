@@ -21,7 +21,7 @@ impl SqliteCache {
         }
         let manager = r2d2_sqlite::SqliteConnectionManager::file(&db_path);
         let pool = r2d2::Pool::builder()
-            .max_size(30)
+            .max_size(1)
             .build(manager)?;
         pool.get()?
             .execute("CREATE TABLE IF NOT EXISTS cache (namespace TEXT, key TEXT, data TEXT)", params![])?;

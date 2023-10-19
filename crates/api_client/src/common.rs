@@ -1,7 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration, num::NonZeroU32};
 
 use lazy_static::lazy_static;
-use ratelimit::Ratelimiter;
+use governor::{RateLimiter, Quota, DefaultDirectRateLimiter, clock::{QuantaClock, Clock}};
 use thiserror::Error;
 use ureq::{Agent, AgentBuilder, Middleware};
 
@@ -49,24 +49,25 @@ pub struct ApiClient {
 }
 
 struct Inner {
-    ratelimit: Ratelimiter,
+    ratelimit: DefaultDirectRateLimiter,
+    // Avoid constructing a new clock each wait period
+    clock: QuantaClock,
     client: Agent,
     base_url: String,
 }
 
 pub struct ApiClientBuilder {
-    requests_per_minute: u64,
+    requests_per_minute: NonZeroU32,
     base_url: String,
     agent_builder: AgentBuilder,
 }
 
 impl ApiClientBuilder {
-    const MAX_BURST: u64 = 30;
+    const MAX_BURST: u32 = 30;
 
-    pub fn new(requests_per_minute: u64, base_url: String) -> ApiClientBuilder {
-        assert!(requests_per_minute > 0, "Non-zero value required for requests_per_minute!");
+    pub fn new(requests_per_minute: u32, base_url: String) -> ApiClientBuilder {
         ApiClientBuilder {
-            requests_per_minute,
+            requests_per_minute: NonZeroU32::new(requests_per_minute).expect("Non-zero value required for requests_per_minute!"),
             base_url,
             agent_builder: AgentBuilder::new().user_agent(USER_AGENT).timeout(Duration::from_secs(60)),
         }
@@ -78,24 +79,15 @@ impl ApiClientBuilder {
     }
 
     pub fn build(self) -> ApiClient {
-        let ms_between_tokens: u64 = 60_000 / self.requests_per_minute;
-        // Unwrap: The two scenarios in which .build() returns Err are:
-        // 1. max_tokens < refill_amount
-        // Not possible: max_tokens is hardcoded to 30, refill_amount to 1
-        // 2. refill_interval > u64::MAX nanoseconds
-        // Not possible: refill_interval calculated by dividing constant by u64, largest possible
-        // value (at requests_per_minute = 1) is 60 seconds (6e10ns < 1.8e19ns)
-        // Therefore, this is effectively infallible.
-        let ratelimit = Ratelimiter::builder(1, Duration::from_millis(ms_between_tokens))
-            .max_tokens(Self::MAX_BURST)
-            .initial_available(Self::MAX_BURST)
-            .build()
-            .unwrap();
+        let q = Quota::per_minute(self.requests_per_minute).allow_burst(NonZeroU32::new(Self::MAX_BURST).unwrap());
+        let ratelimit = RateLimiter::direct(q);
+
         let client_builder = self.agent_builder.timeout(Duration::from_secs(60));
         let client = client_builder.build();
         ApiClient {
             inner: Arc::new(Inner {
                 ratelimit,
+                clock: QuantaClock::default(),
                 client,
                 base_url: self.base_url,
             }),
@@ -112,8 +104,8 @@ impl ApiClient {
     ///
     /// Must be called before every use of the [`Agent`]
     fn wait_for_token(&self) {
-        while let Err(duration) = self.inner.ratelimit.try_wait() {
-            std::thread::sleep(duration);
+        while let Err(duration) = self.inner.ratelimit.check() {
+            std::thread::sleep(duration.wait_time_from(self.inner.clock.now()));
         }
     }
 
