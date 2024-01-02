@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, str::FromStr, thread::JoinHandle};
 
-use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver};
+use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver, mod_merge::ModMerger};
 use crate::di::container::{DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
 use serde::{
@@ -55,6 +55,7 @@ pub enum NodeConfigTypes {
     FileFilter,
     DirectoryMerger,
     ModResolver,
+    ModMerger,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -93,7 +94,7 @@ pub enum NodeConfigEntry {
     Output(OutputDefinition),
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(tag = "source")]
 #[serde(rename_all = "lowercase")]
 pub enum ModDefinition {
@@ -117,7 +118,17 @@ pub enum ModDefinition {
     },
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+impl ModDefinition {
+    pub fn get_fields(&self) -> &ModDefinitionFields {
+        match self {
+            ModDefinition::Modrinth { fields, .. } => fields,
+            ModDefinition::Curse { fields, .. } => fields,
+            ModDefinition::Url { fields, .. } => fields,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ModDefinitionFields {
     pub name: String,
     #[serde(default)]
@@ -126,7 +137,7 @@ pub struct ModDefinitionFields {
     pub default: Option<bool>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default, Hash, Copy)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Default, Hash, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum Side {
     Client,

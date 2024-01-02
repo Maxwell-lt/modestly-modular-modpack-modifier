@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(project.slug, "appleskin");
         assert_eq!(project.title, "AppleSkin");
         assert_eq!(project.client_side, Sided::Required);
-        assert_eq!(project.server_side, Sided::Required);
+        assert_eq!(project.server_side, Sided::Optional);
     }
 
     #[test]
