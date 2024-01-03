@@ -207,6 +207,24 @@ If one of those channels is provided to an input named `input-a`, and the other 
 * `default`
 ** Type: *Files*
 
+==== ModMerger
+
+The ModMerger node takes multiple *Mods* inputs and combines them into a single *Mods* output.
+
+This node is special, in that it accepts any number of inputs, with any name.
+The names provided for inputs are used to resolve conflicts between mods with the same name; inputs with names with an earlier alphabetical ordering take precedence.
+
+For example, two *Mods* channels have a mod named "appleskin".
+If one of those channels is provided to an input named `input-a`, and the other `input-b`, the version of the mod from `input-a` will be retained.
+
+.Inputs
+* Multiple channels with any name will be accepted
+** Type: *Mods*
+
+.Outputs
+* `default`
+** Type: *Mods*
+
 ==== FileFilter
 
 The FileFilter node takes a *Files* input along with a *List* input containing a series of glob patterns, and outputs all files that match _any_ specified glob pattern.
