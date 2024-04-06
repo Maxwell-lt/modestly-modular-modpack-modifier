@@ -116,6 +116,7 @@ pub mod model {
         Required,
         Optional,
         Unsupported,
+        Unknown,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -217,5 +218,13 @@ mod tests {
         let client = ModrinthClient::new();
         let version = client.get_version(APPLESKIN_1_12_VERSION_ID).unwrap();
         assert_eq!(version.version_number, "1.0.14+mc1.12");
+    }
+
+    #[test]
+    fn get_mod_info_sided_returns_unknown() {
+        let client = ModrinthClient::new();
+        let project = client.get_mod_info("dynmap").unwrap();
+        assert_eq!(project.client_side, Sided::Unknown);
+        assert_eq!(project.server_side, Sided::Unknown);
     }
 }
