@@ -170,8 +170,8 @@ mod tests {
         let project = client.get_mod_info(APPLESKIN_ID).unwrap();
         assert_eq!(project.slug, "appleskin");
         assert_eq!(project.title, "AppleSkin");
-        assert_eq!(project.client_side, Sided::Required);
-        assert_eq!(project.server_side, Sided::Unsupported);
+        assert_eq!(project.client_side, Sided::Optional);
+        assert_eq!(project.server_side, Sided::Optional);
     }
 
     #[test]

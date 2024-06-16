@@ -264,7 +264,7 @@ fn resolve_curse(
         default: meta.default.unwrap_or(true),
         encoded: encode(&file_response.file_name).into_owned(),
         filename: file_response.file_name,
-        src: file_response.download_url,
+        src: encode_spaces(&file_response.download_url),
         md5: md5hash,
         side: meta.side,
         title: mod_response.name,
@@ -275,6 +275,10 @@ fn resolve_curse(
     };
     store_in_cache(cache, CURSE_CACHE_NAMESPACE, &cache_key, &resolved)?;
     Ok(resolved)
+}
+
+fn encode_spaces(url: &str) -> String {
+    url.replace(" ", "%20")
 }
 
 // CF has an awesome API where modloader type is a first-class field. Oh wait, that's Modrinth...
@@ -343,7 +347,7 @@ fn resolve_modrinth(
         default: meta.default.unwrap_or(true),
         encoded: encode(&primary_file.filename).into_owned(),
         filename: primary_file.filename.clone(),
-        src: primary_file.url.clone(),
+        src: encode_spaces(&primary_file.url),
         size: primary_file.size,
         md5: md5hash,
         sha256: sha256hash,
