@@ -40,14 +40,9 @@ impl NodeConfig for CurseResolver {
         ctx: &DiContainer,
     ) -> Result<JoinHandle<()>, NodeInitError> {
         let mut manifest_channel = get_input!("manifest", Text, ctx, input_ids)?;
-        let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Text, ctx)?;
-        let json_out = get_output!(ChannelId(node_id.clone(), "json".into()), Text, ctx)?;
+        let out_channel = get_output!(ChannelId(node_id.clone(), "default".into()), ResolvedMods, ctx)?;
 
         let mut waker = ctx.get_waker();
-
-        let minecraft_version = ctx
-            .get_config("minecraft_version")
-            .ok_or_else(|| NodeInitError::MissingConfig("minecraft_version".into()))?;
 
         let curse_client = ctx.get_curse_client().ok_or_else(|| NodeInitError::CurseClientRequired)?;
         let cache = ctx.get_cache();
@@ -66,34 +61,15 @@ impl NodeConfig for CurseResolver {
                 .expect_or_log("Failed to resolve Curse mod"))
                 .collect();
 
-            let raw_nix_file = format!(
-                r#"{{
-                version = "{version}";
-                imports = [];
-                mods = {{
-                    {mods}
-                }};
-            }}"#,
-                version = minecraft_version,
-                mods = resolved.iter().map(|s| s.to_string()).collect::<Vec<_>>().join("\n")
-            );
-            let nix_file = nixpkgs_fmt::reformat_string(&raw_nix_file);
-
-            let json_file = serde_json::to_string_pretty(&resolved).expect_or_log("Serialization of resolved mods to JSON failed");
-
-            if out_channel.send(nix_file).is_err() {
+            if out_channel.send(resolved).is_err() {
                 event!(Level::DEBUG, "Channel 'default' has no subscribers");
-            }
-            if json_out.send(json_file).is_err() {
-                event!(Level::DEBUG, "Channel 'json' has no subscribers");
             }
         }))
     }
 
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType> {
         HashMap::from([
-            (ChannelId(node_id.to_owned(), "default".into()), InputType::Text(channel(1).0)),
-            (ChannelId(node_id.to_owned(), "json".into()), InputType::Text(channel(1).0)),
+            (ChannelId(node_id.to_owned(), "default".into()), InputType::ResolvedMods(channel(1).0)),
         ])
     }
 }
@@ -252,7 +228,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mod_resolver() {
+    fn test_curse_resolver() {
         let node_id = "resolver";
         let mod_channel = broadcast::channel(1).0;
         let input_ids = HashMap::from([("manifest".into(), ChannelId::from_str("mod-source").unwrap())]);
@@ -275,8 +251,7 @@ mod tests {
             .set_config("modloader", "forge")
             .build();
 
-        let mut out_channel = get_output_test!(ChannelId::from_str("resolver").unwrap(), Text, ctx);
-        let mut json_out_channel = get_output_test!(ChannelId::from_str("resolver::json").unwrap(), Text, ctx);
+        let mut out_channel = get_output_test!(ChannelId::from_str("resolver").unwrap(), ResolvedMods, ctx);
 
         let manifest = r#"{"files":[{"projectID":357178,"fileID":3437402,"required":true}]}"#;
 
@@ -288,47 +263,22 @@ mod tests {
         handle.join().unwrap();
 
         let timeout = Duration::from_secs(30);
-        let output: String = read_channel(&mut out_channel, timeout).unwrap();
-        let json_output: String = read_channel(&mut json_out_channel, timeout).unwrap();
+        let output = read_channel(&mut out_channel, timeout).unwrap();
 
-        let expected = r#"{
-  version = "1.12.2";
-  imports = [ ];
-  mods = {
-    "mixinbootstrap" = {
-      title = "MixinBootstrap";
-      name = "mixinbootstrap";
-      side = "both";
-      required = "true";
-      default = "true";
-      filename = "_MixinBootstrap-1.1.0.jar";
-      encoded = "_MixinBootstrap-1.1.0.jar";
-      src = "https://edge.forgecdn.net/files/3437/402/_MixinBootstrap-1.1.0.jar";
-      size = "1119478";
-      md5 = "9df0dc628ebcd787270f487fbbf8157a";
-      sha256 = "17c589aad9907d4ba56d578d502afa80aac1ba2fa8677e8b4d06c019c41d7731";
-    };
-  };
-}
-"#;
-
-        let json_expected = r#"[
-  {
-    "name": "mixinbootstrap",
-    "title": "MixinBootstrap",
-    "side": "both",
-    "required": true,
-    "default": true,
-    "filename": "_MixinBootstrap-1.1.0.jar",
-    "encoded": "_MixinBootstrap-1.1.0.jar",
-    "src": "https://edge.forgecdn.net/files/3437/402/_MixinBootstrap-1.1.0.jar",
-    "size": 1119478,
-    "md5": "9df0dc628ebcd787270f487fbbf8157a",
-    "sha256": "17c589aad9907d4ba56d578d502afa80aac1ba2fa8677e8b4d06c019c41d7731"
-  }
-]"#;
+        let expected = vec![ResolvedMod {
+            name: "mixinbootstrap".to_owned(),
+            title: "MixinBootstrap".to_owned(),
+            side: Side::Both,
+            required: true,
+            default: true,
+            filename: "_MixinBootstrap-1.1.0.jar".to_owned(),
+            encoded: "_MixinBootstrap-1.1.0.jar".to_owned(),
+            src: "https://edge.forgecdn.net/files/3437/402/_MixinBootstrap-1.1.0.jar".to_owned(),
+            size: 1119478,
+            md5: "9df0dc628ebcd787270f487fbbf8157a".to_owned(),
+            sha256: "17c589aad9907d4ba56d578d502afa80aac1ba2fa8677e8b4d06c019c41d7731".to_owned(),
+        }];
 
         assert_eq!(output, expected);
-        assert_eq!(json_output, json_expected);
     }
 }
