@@ -164,8 +164,12 @@ nodes:
     kind: ModResolver
     input:
       mods: 'modlist'
+  - id: manifest_writer
+    kind: ModWriter
+    input:
+      resolved: 'resolver'
   - filename: manifest.nix
-    source: 'resolver::default'
+    source: 'manifest_writer::default'
 ..."#;
         let global_config = MMMMConfig {
             curse_proxy_url: Some("https://api.curse.tools/v1/cf".into()),
