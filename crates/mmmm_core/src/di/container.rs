@@ -5,7 +5,7 @@ use tokio::sync::broadcast::{self, error::SendError};
 
 use crate::{
     file::{filestore::FileStore, filetree::FileTree},
-    node::config::{ChannelId, ModDefinition},
+    node::config::{ChannelId, ModDefinition, ResolvedMod},
     Cache,
 };
 
@@ -52,6 +52,7 @@ pub enum InputType {
     Files(broadcast::Sender<FileTree>),
     List(broadcast::Sender<Vec<String>>),
     Mods(broadcast::Sender<Vec<ModDefinition>>),
+    ResolvedMods(broadcast::Sender<Vec<ResolvedMod>>),
 }
 
 // TODO: replace with a macro (proc macro required?)
@@ -62,6 +63,7 @@ impl InputType {
             InputType::Files(c) => OutputType::Files(c.subscribe()),
             InputType::List(c) => OutputType::List(c.subscribe()),
             InputType::Mods(c) => OutputType::Mods(c.subscribe()),
+            InputType::ResolvedMods(c) => OutputType::ResolvedMods(c.subscribe()),
         }
     }
 }
@@ -72,6 +74,7 @@ pub enum OutputType {
     Files(broadcast::Receiver<FileTree>),
     List(broadcast::Receiver<Vec<String>>),
     Mods(broadcast::Receiver<Vec<ModDefinition>>),
+    ResolvedMods(broadcast::Receiver<Vec<ResolvedMod>>),
 }
 
 #[derive(Error, Debug)]

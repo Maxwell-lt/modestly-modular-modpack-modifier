@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, str::FromStr, thread::JoinHandle};
 
-use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver, curse_resolver::CurseResolver, mod_merge::ModMerger};
+use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver, curse_resolver::CurseResolver, mod_merge::ModMerger, mod_writer::ModWriter};
 use crate::di::container::{DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
 use serde::{
@@ -58,6 +58,7 @@ pub enum NodeConfigTypes {
     DirectoryMerger,
     ModResolver,
     CurseResolver,
+    ModWriter,
     ModMerger,
 }
 
