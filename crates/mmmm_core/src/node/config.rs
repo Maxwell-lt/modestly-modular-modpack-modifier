@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, str::FromStr, thread::JoinHandle};
 
-use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver, mod_merge::ModMerger};
+use super::{archive_downloader::ArchiveDownloader, dir_merge::DirectoryMerger, file_filter::FileFilter, mod_resolver::ModResolver, curse_resolver::CurseResolver, mod_merge::ModMerger};
 use crate::di::container::{DiContainer, InputType};
 use enum_dispatch::enum_dispatch;
 use serde::{
@@ -39,6 +39,8 @@ pub enum NodeInitError {
     MissingChannel(ChannelId),
     #[error("Could not find config value named {0}!")]
     MissingConfig(String),
+    #[error("Curse client must be configured!")]
+    CurseClientRequired,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -55,6 +57,7 @@ pub enum NodeConfigTypes {
     FileFilter,
     DirectoryMerger,
     ModResolver,
+    CurseResolver,
     ModMerger,
 }
 
