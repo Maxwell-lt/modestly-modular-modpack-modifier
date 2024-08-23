@@ -194,7 +194,7 @@ impl<'de> Deserialize<'de> for ChannelId {
 
 /// Representation of Nix output format for mods. Several fields have been removed compared to past
 /// implementations of cursetool, as they are not used by the builder.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct ResolvedMod {
     pub name: String,
     pub title: String,

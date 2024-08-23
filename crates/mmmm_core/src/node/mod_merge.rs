@@ -5,13 +5,13 @@ use std::{
 
 use serde::Deserialize;
 use tokio::sync::broadcast::{channel, Receiver};
-use tracing::{span, Level, event};
+use tracing::{event, span, Level};
 use tracing_unwrap::{OptionExt, ResultExt};
 
 use crate::di::container::{DiContainer, InputType, OutputType};
 
 use super::{
-    config::{ChannelId, ModDefinition, NodeConfig, NodeInitError},
+    config::{ChannelId, NodeConfig, NodeInitError, ResolvedMod},
     utils::{get_input, get_output},
 };
 
@@ -32,10 +32,10 @@ impl NodeConfig for ModMerger {
             // Sorting is reversed; earlier input names take priority with overlapping mods.
             keys.sort_unstable_by(|a, b| b.cmp(a));
             keys.into_iter()
-                .map(|id| get_input!(&id, Mods, ctx, input_ids).map(|channel| (id, channel)))
+                .map(|id| get_input!(&id, ResolvedMods, ctx, input_ids).map(|channel| (id, channel)))
                 .collect::<Result<Vec<(String, Receiver<_>)>, _>>()
         }?;
-        let output_channel = get_output!(ChannelId(node_id.clone(), "default".into()), Mods, ctx)?;
+        let output_channel = get_output!(ChannelId(node_id.clone(), "default".into()), ResolvedMods, ctx)?;
         let mut waker = ctx.get_waker();
         Ok(spawn(move || {
             let _span = span!(Level::INFO, "ModMerger", nodeid = node_id).entered();
@@ -43,12 +43,12 @@ impl NodeConfig for ModMerger {
                 panic!()
             }
 
-            let output_list: Vec<ModDefinition> = input_channels
+            let output_list: Vec<ResolvedMod> = input_channels
                 .iter_mut()
                 .map(|(id, channel)| channel.blocking_recv().expect_or_log(&format!("Failed to receive on {id} input")))
                 .map(|list| {
                     list.into_iter()
-                        .map(|mod_def| (mod_def.get_fields().name.to_owned(), mod_def))
+                        .map(|mod_def| (mod_def.name.to_owned(), mod_def))
                         .collect::<HashMap<_, _>>()
                 })
                 .reduce(|mut res, cur| {
@@ -65,7 +65,7 @@ impl NodeConfig for ModMerger {
     }
 
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType> {
-        HashMap::from([(ChannelId(node_id.to_owned(), "default".into()), InputType::Mods(channel(1).0))])
+        HashMap::from([(ChannelId(node_id.to_owned(), "default".into()), InputType::ResolvedMods(channel(1).0))])
     }
 }
 
@@ -76,7 +76,7 @@ mod tests {
     use crate::{
         di::container::DiContainerBuilder,
         node::{
-            config::{ModDefinition, ModDefinitionFields, NodeConfigTypes, Side},
+            config::{NodeConfigTypes, Side},
             utils::{get_output_test, read_channel},
         },
     };
@@ -86,47 +86,57 @@ mod tests {
     #[test]
     fn merge_mods() {
         let node_id = "merge";
-        let list1: Vec<ModDefinition> = vec![ModDefinition::Modrinth {
-            id: None,
-            file_id: None,
-            fields: ModDefinitionFields {
-                name: "thaumcraft7".to_owned(),
-                side: Side::Both,
-                required: None,
-                default: None,
-            },
+        let list1: Vec<ResolvedMod> = vec![ResolvedMod {
+            name: "thaumcraft7".to_owned(),
+            title: String::new(),
+            side: Side::Both,
+            required: true,
+            default: true,
+            filename: String::new(),
+            encoded: String::new(),
+            src: String::new(),
+            size: 0,
+            md5: String::new(),
+            sha256: String::new(),
         }];
-        let list2: Vec<ModDefinition> = vec![
-            ModDefinition::Modrinth {
-                id: None,
-                file_id: None,
-                fields: ModDefinitionFields {
-                    name: "redpower3".to_owned(),
-                    side: Side::Both,
-                    required: None,
-                    default: None,
-                },
+
+        let list2: Vec<ResolvedMod> = vec![
+            ResolvedMod {
+                name: "redpower3".to_owned(),
+                title: String::new(),
+                side: Side::Both,
+                required: true,
+                default: true,
+                filename: String::new(),
+                encoded: String::new(),
+                src: String::new(),
+                size: 0,
+                md5: String::new(),
+                sha256: String::new(),
             },
-            ModDefinition::Curse {
-                id: None,
-                file_id: None,
-                fields: ModDefinitionFields {
-                    name: "thaumcraft7".to_owned(),
-                    side: Side::Both,
-                    required: None,
-                    default: None,
-                },
+            ResolvedMod {
+                name: "thaumcraft7".to_owned(),
+                title: String::new(),
+                side: Side::Server,
+                required: true,
+                default: true,
+                filename: String::new(),
+                encoded: String::new(),
+                src: String::new(),
+                size: 0,
+                md5: String::new(),
+                sha256: String::new(),
             },
         ];
 
         let node = NodeConfigTypes::ModMerger(ModMerger);
-        let c1 = channel::<Vec<ModDefinition>>(1).0;
-        let c2 = channel::<Vec<ModDefinition>>(1).0;
+        let c1 = channel::<Vec<ResolvedMod>>(1).0;
+        let c2 = channel::<Vec<ResolvedMod>>(1).0;
         let mut ctx = DiContainerBuilder::default()
             .channel_from_node(node.generate_channels(node_id))
             .channel_from_node(HashMap::from([
-                (ChannelId::from_str("list1").unwrap(), InputType::Mods(c1.clone())),
-                (ChannelId::from_str("list2").unwrap(), InputType::Mods(c2.clone())),
+                (ChannelId::from_str("list1").unwrap(), InputType::ResolvedMods(c1.clone())),
+                (ChannelId::from_str("list2").unwrap(), InputType::ResolvedMods(c2.clone())),
             ]))
             .build();
 
@@ -135,7 +145,7 @@ mod tests {
             ("2".into(), ChannelId::from_str("list2").unwrap()),
         ]);
 
-        let mut out = get_output_test!(&ChannelId::from_str(node_id).unwrap(), Mods, ctx);
+        let mut out = get_output_test!(&ChannelId::from_str(node_id).unwrap(), ResolvedMods, ctx);
 
         node.validate_and_spawn(node_id.into(), &input_ids, &ctx).unwrap();
 
