@@ -3,6 +3,7 @@ pub mod config;
 pub mod dir_merge;
 pub mod mod_merge;
 pub mod file_filter;
+pub mod file_picker;
 pub mod mod_resolver;
 pub mod curse_resolver;
 pub mod mod_writer;
