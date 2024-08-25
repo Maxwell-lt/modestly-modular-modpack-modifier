@@ -18,7 +18,7 @@ With Nix Flakes enabled, run
 
 [source,console]
 ----
-$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.5.2 -- ./pack-manifest.yml
+$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.6.0 -- ./pack-manifest.yml
 ----
 
 Optionally, the paths where output files should be saved can be specified with `-o /path/to/output` or `--output-dir /path/to/output`.
@@ -209,21 +209,21 @@ If one of those channels is provided to an input named `input-a`, and the other 
 
 ==== ModMerger
 
-The ModMerger node takes multiple *Mods* inputs and combines them into a single *Mods* output.
+The ModMerger node takes multiple *ResolvedMods* inputs and combines them into a single *ResolvedMods* output.
 
 This node is special, in that it accepts any number of inputs, with any name.
 The names provided for inputs are used to resolve conflicts between mods with the same name; inputs with names with an earlier alphabetical ordering take precedence.
 
-For example, two *Mods* channels have a mod named "appleskin".
+For example, two *ResolvedMods* channels have a mod named "appleskin".
 If one of those channels is provided to an input named `input-a`, and the other `input-b`, the version of the mod from `input-a` will be retained.
 
 .Inputs
 * Multiple channels with any name will be accepted
-** Type: *Mods*
+** Type: *ResolvedMods*
 
 .Outputs
 * `default`
-** Type: *Mods*
+** Type: *ResolvedMods*
 
 ==== FileFilter
 
@@ -245,9 +245,8 @@ Inverted glob patterns are not supported, so the `inverse` channel should be use
 
 ==== ModResolver
 
-The ModResolver node takes a *Mods* input and outputs a *Text* channel with each mod resolved into the Nix file format supported by https://github.com/Erisia/builder[Erisia/builder].
+The ModResolver node takes a *Mods* input and outputs a *ResolvedMods* list that includes all the required metadata.
 
-The secondary `json` channel outputs a JSON array of resolved mods.
 
 [IMPORTANT]
 .Curse API
@@ -268,6 +267,91 @@ See <<config-file-sidebar>> for details.
 
 .Outputs
 * `default`
+** Type: *ResolvedMods*
+
+==== ModWriter
+
+The ModWriter node takes a *ResolvedMods* input and outputs two *Text* channels with those mods in a Nix manifest and JSON manifest as supported by https://github.com/Erisia/builder[Erisia/builder].
+
+.Config keys
+* `minecraft_version`
+** Version of Minecraft to include in the manifest.
+
+.Inputs
+* `resolved`
+** Type: *ResolvedMods*
+
+.Outputs
+* `default`
 ** Type: *Text*
 * `json`
 ** Type: *Text*
+
+==== CurseResolver
+
+The CurseResolver node takes a *Text* input, parses it as a CurseForge pack manifest, and outputs *ResolvedMods*.
+
+[IMPORTANT]
+.Curse API
+====
+The config file `mmmm.toml` must be present in the config directory with either a valid Curse API key, or the URL to a Curse API proxy service.
+See <<config-file-sidebar>> for details.
+====
+
+.Inputs
+* `manifest`
+** Type: *Text*
+
+.Outputs
+* `default`
+** Type: *ResolvedMods*
+
+==== FilePicker
+
+The FilePicker node takes a *Files* input along with a path from a *Text* input, and outputs the file at that path as a *Text* channel. This node will fail if a UTF-8 encoded file is not present at the provided path.
+
+.Inputs
+* `files`
+** Type: *Files*
+* `path`
+** Type: *Text*
+
+.Outputs
+* `default`
+** Type: *Text*
+
+==== ModOverrider
+
+The ModOverrider node takes a *ResolvedMods* input and a *Mods* input, and applies the values from the side, required, and default fields from the latter to the former, by mod name. The overridden mod list is then returned as a *ResolvedMods* channel.
+
+[NOTE]
+.Overridden fields
+====
+When declaring the *Mods* used as an override, keep a few things in mind. The defined mod type has no effect. If the required or default fields are not set, the original value will be used. If the side field is not set, the mod will be set to use side Both.
+====
+
+.Inputs
+* `mods`
+** Type: *ResolvedMods*
+* `overrides`
+** Type: *Mods*
+
+.Outputs
+* `default`
+** Type: *ResolvedMods*
+
+==== ModFilter
+
+The ModFilter node takes a *ResolvedMods* input and a *List* of mod names, and outputs the mods which match any of those names. Mods that match none of those names are sent to the named output `inverse`
+
+.Inputs
+* `mods`
+** Type: *ResolvedMods*
+* `filters`
+** Type: *List*
+
+.Outputs
+* `default`
+** Type: *ResolvedMods*
+* `inverse`
+** Type: *ResolvedMods*

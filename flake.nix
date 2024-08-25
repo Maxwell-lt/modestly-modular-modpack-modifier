@@ -39,7 +39,7 @@
 
 	defaultPackage = rustPlatform.buildRustPackage {
 	  pname = "modestly-modular-modpack-modifier";
-	  version = "0.5.5";
+	  version = "0.6.0";
 
 	  src = builtins.filterSource
 	    (path: type: type != "symlink" && baseNameOf path != "target")
@@ -52,6 +52,7 @@
             "--skip=di::orch::tests::test_orchestrator"
             "--skip=node::archive_downloader::tests::test_archive_downloader"
             "--skip=node::mod_resolver::tests::test_mod_resolver"
+            "--skip=node::curse_resolver::tests::test_curse_resolver"
           ];
 
           cargoLock = {
