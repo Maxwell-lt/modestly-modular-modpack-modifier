@@ -5,6 +5,8 @@ pub mod mod_merge;
 pub mod file_filter;
 pub mod file_picker;
 pub mod mod_resolver;
+pub mod mod_overrider;
+pub mod mod_filter;
 pub mod curse_resolver;
 pub mod mod_writer;
 pub mod source;
