@@ -41,7 +41,8 @@ impl NodeConfig for ModWriter {
                 panic!()
             }
 
-            let resolved = resolved_mods_channel.blocking_recv().expect_or_log("Failed to receive on resolved input");
+            let mut resolved = resolved_mods_channel.blocking_recv().expect_or_log("Failed to receive on resolved input");
+            resolved.sort_by_key(|r| r.name.clone());
 
             let raw_nix_file = format!(
                 r#"{{

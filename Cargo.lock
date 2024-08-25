@@ -119,7 +119,7 @@ dependencies = [
 
 [[package]]
 name = "api_client"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "const_format",
  "governor",
@@ -1190,7 +1190,7 @@ dependencies = [
 
 [[package]]
 name = "mmmm_core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "api_client",
  "boxcar",
@@ -1219,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "modestly-modular-modpack-modifier-cli"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "clap 4.5.7",
  "color-eyre",
