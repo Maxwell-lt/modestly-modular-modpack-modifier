@@ -1,6 +1,5 @@
 use ureq::Middleware;
-use std::io::{Read, Write};
-use std::fs::OpenOptions;
+use std::io::Read;
 
 use crate::common::ApiError;
 
@@ -23,26 +22,6 @@ impl Middleware for ApiKeyMiddleware {
     }
 }
 
-fn get_log_file_path() -> std::path::PathBuf {
-    let now = chrono::Utc::now();
-    let datetime = now.format("%Y%m%d_%H%M%S");
-    
-    // Try to get the directory from environment variable, fallback to current directory
-    let base_dir = std::env::var("MMMM_LOG_DIR").unwrap_or_else(|_| ".".to_string());
-    std::path::Path::new(&base_dir).join(format!("mmmm-{}.log", datetime))
-}
-
-fn log_to_file(message: &str) {
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(get_log_file_path())
-    {
-        let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
-        let _ = writeln!(file, "[{}] {}", timestamp, message);
-    }
-}
-
 fn log_json_on_error<T: serde::de::DeserializeOwned>(mut response: ureq::Response, context: &str) -> Result<T, ApiError> {
     // Read the response body first
     let mut body = Vec::new();
@@ -52,9 +31,7 @@ fn log_json_on_error<T: serde::de::DeserializeOwned>(mut response: ureq::Respons
             match serde_json::from_slice::<T>(&body) {
                 Ok(data) => Ok(data),
                 Err(e) => {
-                    let error_msg = format!("JSON deserialization failed for {}: {}. Raw response: {}", context, e, body_str);
-                    eprintln!("ERROR: {}", error_msg);
-                    log_to_file(&error_msg);
+                    eprintln!("ERROR: JSON deserialization failed for {}: {}. Raw response: {}", context, e, body_str);
                     Err(ApiError::JsonDeserialize(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("JSON deserialization error: {}", e)
@@ -63,9 +40,7 @@ fn log_json_on_error<T: serde::de::DeserializeOwned>(mut response: ureq::Respons
             }
         },
         Err(read_err) => {
-            let error_msg = format!("Failed to read response body for {}: {}", context, read_err);
-            eprintln!("ERROR: {}", error_msg);
-            log_to_file(&error_msg);
+            eprintln!("ERROR: Failed to read response body for {}: {}", context, read_err);
             Err(ApiError::JsonDeserialize(read_err))
         }
     }
