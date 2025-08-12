@@ -1,4 +1,6 @@
 use ureq::Middleware;
+use std::io::{Read, Write};
+use std::fs::OpenOptions;
 
 use crate::common::ApiError;
 
@@ -18,6 +20,54 @@ struct ApiKeyMiddleware(String);
 impl Middleware for ApiKeyMiddleware {
     fn handle(&self, request: ureq::Request, next: ureq::MiddlewareNext) -> Result<ureq::Response, ureq::Error> {
         next.handle(request.set("x-api-key", &self.0))
+    }
+}
+
+fn get_log_file_path() -> std::path::PathBuf {
+    let now = chrono::Utc::now();
+    let datetime = now.format("%Y%m%d_%H%M%S");
+    
+    // Try to get the directory from environment variable, fallback to current directory
+    let base_dir = std::env::var("MMMM_LOG_DIR").unwrap_or_else(|_| ".".to_string());
+    std::path::Path::new(&base_dir).join(format!("mmmm-{}.log", datetime))
+}
+
+fn log_to_file(message: &str) {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(get_log_file_path())
+    {
+        let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        let _ = writeln!(file, "[{}] {}", timestamp, message);
+    }
+}
+
+fn log_json_on_error<T: serde::de::DeserializeOwned>(mut response: ureq::Response, context: &str) -> Result<T, ApiError> {
+    // Read the response body first
+    let mut body = Vec::new();
+    match response.into_reader().read_to_end(&mut body) {
+        Ok(_) => {
+            let body_str = String::from_utf8_lossy(&body);
+            match serde_json::from_slice::<T>(&body) {
+                Ok(data) => Ok(data),
+                Err(e) => {
+                    let error_msg = format!("JSON deserialization failed for {}: {}. Raw response: {}", context, e, body_str);
+                    eprintln!("ERROR: {}", error_msg);
+                    log_to_file(&error_msg);
+                    Err(ApiError::JsonDeserialize(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("JSON deserialization error: {}", e)
+                    )))
+                }
+            }
+        },
+        Err(read_err) => {
+            let error_msg = format!("Failed to read response body for {}: {}", context, read_err);
+            eprintln!("ERROR: {}", error_msg);
+            log_to_file(&error_msg);
+            Err(ApiError::JsonDeserialize(read_err))
+        }
     }
 }
 
@@ -62,7 +112,9 @@ impl CurseClient {
     ///
     /// Endpoint: /mods/{id}
     pub fn find_mod_by_id(&self, id: u32) -> Result<Mod, ApiError> {
-        Ok(self.client.get(&format!("/mods/{id}"), [])?.into_json::<Wrapper<Mod>>()?.data)
+        let response = self.client.get(&format!("/mods/{id}"), [])?;
+        let wrapper = log_json_on_error::<Wrapper<Mod>>(response, &format!("find_mod_by_id({})", id))?;
+        Ok(wrapper.data)
     }
 
     /// Get list of files for a mod.
@@ -98,7 +150,9 @@ impl CurseClient {
     /// Endpoint: /mods/files
     pub fn get_files(&self, ids: &[u32]) -> Result<Vec<File>, ApiError> {
         let request = GetModFilesRequest { file_ids: ids.to_vec() };
-        Ok(self.client.post_json("/mods/files", request)?.into_json::<Wrapper<Vec<File>>>()?.data)
+        let response = self.client.post_json("/mods/files", request)?;
+        let wrapper = log_json_on_error::<Wrapper<Vec<File>>>(response, &format!("get_files({:?})", ids))?;
+        Ok(wrapper.data)
     }
 }
 

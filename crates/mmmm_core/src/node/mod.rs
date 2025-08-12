@@ -4,6 +4,7 @@ pub mod dir_merge;
 pub mod mod_merge;
 pub mod file_filter;
 pub mod file_picker;
+pub mod manifest_filter;
 pub mod mod_resolver;
 pub mod mod_overrider;
 pub mod mod_filter;

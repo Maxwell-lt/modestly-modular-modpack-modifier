@@ -16,6 +16,7 @@ serde_yaml = "0.9"
 serde_repr = "0.1.16"
 thiserror = "1.0.46"
 lazy_static = "1.4.0"
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 toml = "0.8.1"

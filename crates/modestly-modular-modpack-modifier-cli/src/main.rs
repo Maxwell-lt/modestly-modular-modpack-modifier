@@ -30,6 +30,12 @@ fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
+    
+    // Set the log directory to the same directory as the YAML file
+    if let Some(yaml_dir) = args.definition.parent() {
+        std::env::set_var("MMMM_LOG_DIR", yaml_dir);
+    }
+    
     let pack_def = fs::read_to_string(&args.definition)
         .wrap_err_with(|| format!("Failed to read pack definition YAML from {}", args.definition.display()))
         .suggestion("Provide a valid path to a pack definition YAML file")?;
