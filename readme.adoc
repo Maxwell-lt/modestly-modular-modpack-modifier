@@ -18,7 +18,7 @@ With Nix Flakes enabled, run
 
 [source,console]
 ----
-$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.6.0 -- ./pack-manifest.yml
+$ nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.6.1 -- ./pack-manifest.yml
 ----
 
 Optionally, the paths where output files should be saved can be specified with `-o /path/to/output` or `--output-dir /path/to/output`.
@@ -26,6 +26,16 @@ The directory used for the config file (defaults to the platform-specific user c
 
 Mod resolution data is persistently cached for performance, which may cause the tool to pick up old versions of mods that are specified without a file ID.
 To clear the cache and ensure the newest versions of unpinned mods are retrieved, run with the flag `--clear-cache`.
+
+For more detailed logging information about individual node operations, set the `RUST_LOG` environment variable to `debug` or `trace`:
+
+[source,console]
+----
+$ RUST_LOG=debug nix run github:maxwell-lt/modestly-modular-modpack-modifier/0.6.1 -- ./pack-manifest.yml
+----
+
+This will show detailed information about mod filtering, resolution progress, and other node operations.
+
 
 [#config-file-sidebar,reftext="Config File Format"]
 .Config File Format
