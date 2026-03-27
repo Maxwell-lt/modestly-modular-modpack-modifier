@@ -53,12 +53,18 @@ impl NodeConfig for CurseResolver {
             }
 
             let manifest = manifest_channel.blocking_recv().expect_or_log("Failed to receive on manifest input");
-            event!(Level::INFO, "Got {} mods to resolve", manifest.len());
-
             let manifest_mods = serde_json::from_str::<CurseManifest>(&manifest).expect_or_log("Failed to deserialize Curse manifest!").files;
+            event!(Level::INFO, "Got {} mods to resolve", manifest_mods.len());
+
             let resolved: Vec<ResolvedMod> = manifest_mods.par_iter()
-                .map(|manifest_mod| resolve_curse(&curse_client, manifest_mod.project_id, manifest_mod.file_id, &cache)
-                .expect_or_log("Failed to resolve Curse mod"))
+                .map(|manifest_mod| {
+                    resolve_curse(&curse_client, manifest_mod.project_id, manifest_mod.file_id, &cache)
+                        .unwrap_or_else(|e| {
+                            event!(Level::ERROR, "Failed to resolve mod with projectID={}, fileID={}: {}", 
+                                   manifest_mod.project_id, manifest_mod.file_id, e);
+                            panic!("Failed to resolve Curse mod: {}", e);
+                        })
+                })
                 .collect();
 
             if out_channel.send(resolved).is_err() {

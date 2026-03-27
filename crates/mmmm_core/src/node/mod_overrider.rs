@@ -39,12 +39,33 @@ impl NodeConfig for ModOverrider {
             mods.iter_mut().for_each(|m| {
                 let o = overrides_map.get(&m.name);
                 if let Some(o) = o {
-                    m.side = o.get_fields().side;
-                    if let Some(required) = o.get_fields().required {
-                        m.required = required;
-                    }
-                    if let Some(default) = o.get_fields().default {
-                        m.default = default;
+                    // Handle URL overrides - replace the entire mod
+                    if let super::config::ModDefinition::Url { location, filename, fields } = o {
+                        event!(Level::INFO, "Replacing mod '{}' with URL override: {}", m.name, location);
+                        m.src = location.clone();
+                        if let Some(filename) = filename {
+                            m.filename = filename.clone();
+                            m.encoded = filename.clone(); // URL-encode if needed
+                        }
+                        // Still apply field overrides
+                        m.side = fields.side;
+                        if let Some(required) = fields.required {
+                            m.required = required;
+                        }
+                        if let Some(default) = fields.default {
+                            m.default = default;
+                        }
+                        // Note: We can't recalculate size/hashes without downloading the file
+                        // This is a limitation of URL overrides - the original hashes remain
+                    } else {
+                        // Original behavior for non-URL overrides
+                        m.side = o.get_fields().side;
+                        if let Some(required) = o.get_fields().required {
+                            m.required = required;
+                        }
+                        if let Some(default) = o.get_fields().default {
+                            m.default = default;
+                        }
                     }
                 }
             });

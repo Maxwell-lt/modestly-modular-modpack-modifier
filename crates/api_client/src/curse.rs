@@ -1,4 +1,5 @@
 use ureq::Middleware;
+use std::io::Read;
 
 use crate::common::ApiError;
 
@@ -18,6 +19,30 @@ struct ApiKeyMiddleware(String);
 impl Middleware for ApiKeyMiddleware {
     fn handle(&self, request: ureq::Request, next: ureq::MiddlewareNext) -> Result<ureq::Response, ureq::Error> {
         next.handle(request.set("x-api-key", &self.0))
+    }
+}
+
+fn log_json_on_error<T: serde::de::DeserializeOwned>(mut response: ureq::Response, context: &str) -> Result<T, ApiError> {
+    // Read the response body first
+    let mut body = Vec::new();
+    match response.into_reader().read_to_end(&mut body) {
+        Ok(_) => {
+            let body_str = String::from_utf8_lossy(&body);
+            match serde_json::from_slice::<T>(&body) {
+                Ok(data) => Ok(data),
+                Err(e) => {
+                    eprintln!("ERROR: JSON deserialization failed for {}: {}. Raw response: {}", context, e, body_str);
+                    Err(ApiError::JsonDeserialize(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("JSON deserialization error: {}", e)
+                    )))
+                }
+            }
+        },
+        Err(read_err) => {
+            eprintln!("ERROR: Failed to read response body for {}: {}", context, read_err);
+            Err(ApiError::JsonDeserialize(read_err))
+        }
     }
 }
 
@@ -62,7 +87,9 @@ impl CurseClient {
     ///
     /// Endpoint: /mods/{id}
     pub fn find_mod_by_id(&self, id: u32) -> Result<Mod, ApiError> {
-        Ok(self.client.get(&format!("/mods/{id}"), [])?.into_json::<Wrapper<Mod>>()?.data)
+        let response = self.client.get(&format!("/mods/{id}"), [])?;
+        let wrapper = log_json_on_error::<Wrapper<Mod>>(response, &format!("find_mod_by_id({})", id))?;
+        Ok(wrapper.data)
     }
 
     /// Get list of files for a mod.
@@ -98,7 +125,9 @@ impl CurseClient {
     /// Endpoint: /mods/files
     pub fn get_files(&self, ids: &[u32]) -> Result<Vec<File>, ApiError> {
         let request = GetModFilesRequest { file_ids: ids.to_vec() };
-        Ok(self.client.post_json("/mods/files", request)?.into_json::<Wrapper<Vec<File>>>()?.data)
+        let response = self.client.post_json("/mods/files", request)?;
+        let wrapper = log_json_on_error::<Wrapper<Vec<File>>>(response, &format!("get_files({:?})", ids))?;
+        Ok(wrapper.data)
     }
 }
 

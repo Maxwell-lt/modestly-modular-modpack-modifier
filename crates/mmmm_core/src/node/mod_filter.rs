@@ -34,8 +34,18 @@ impl NodeConfig for ModFilter {
             let mut filters = filter_channel.blocking_recv().expect_or_log("Failed to receive on filters input");
             filters.sort();
 
+            let mod_names: Vec<&String> = mods.iter().map(|m| &m.name).collect();
+            event!(Level::INFO, "Processing {} mods before filtering: {:?}", mods.len(), mod_names);
+            event!(Level::INFO, "Filter list contains {} mod names: {:?}", filters.len(), filters);
+
             let (included, excluded): (Vec<_>, Vec<_>) = mods.clone().into_iter().partition(|m| filters.binary_search(&m.name).is_ok());
 
+            for mod_entry in &included {
+                event!(Level::INFO, "Matched filter, including mod: {}", mod_entry.name);
+            }
+
+            event!(Level::INFO, "Filtered {} mods: {} included, {} excluded", 
+                   mods.len(), included.len(), excluded.len());
 
             if out_channel.send(included).is_err() {
                 event!(Level::DEBUG, "Channel 'default' has no subscribers");

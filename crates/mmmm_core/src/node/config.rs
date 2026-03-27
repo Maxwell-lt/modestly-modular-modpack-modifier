@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, str::FromStr, thread::JoinHandle};
 
 use super::{
     archive_downloader::ArchiveDownloader, curse_resolver::CurseResolver, dir_merge::DirectoryMerger, file_filter::FileFilter,
-    file_picker::FilePicker, mod_filter::ModFilter, mod_merge::ModMerger, mod_overrider::ModOverrider, mod_resolver::ModResolver,
+    file_picker::FilePicker, manifest_filter::ManifestFilter, mod_filter::ModFilter, mod_merge::ModMerger, mod_overrider::ModOverrider, mod_resolver::ModResolver,
     mod_writer::ModWriter,
 };
 use crate::di::container::{DiContainer, InputType};
@@ -60,6 +60,7 @@ pub enum NodeConfigTypes {
     ArchiveDownloader,
     FileFilter,
     FilePicker,
+    ManifestFilter,
     DirectoryMerger,
     ModResolver,
     ModOverrider,
