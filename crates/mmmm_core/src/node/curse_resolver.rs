@@ -55,10 +55,17 @@ impl NodeConfig for CurseResolver {
             let manifest = manifest_channel.blocking_recv().expect_or_log("Failed to receive on manifest input");
             event!(Level::INFO, "Got {} mods to resolve", manifest.len());
 
-            let manifest_mods = serde_json::from_str::<CurseManifest>(&manifest).expect_or_log("Failed to deserialize Curse manifest!").files;
-            let resolved: Vec<ResolvedMod> = manifest_mods.par_iter()
-                .map(|manifest_mod| resolve_curse(&curse_client, manifest_mod.project_id, manifest_mod.file_id, &cache)
-                .expect_or_log("Failed to resolve Curse mod"))
+            let manifest_mods = serde_json::from_str::<CurseManifest>(&manifest)
+                .expect_or_log("Failed to deserialize Curse manifest!")
+                .files;
+            let resolved: Vec<ResolvedMod> = manifest_mods
+                .par_iter()
+                .filter_map(|manifest_mod| match resolve_curse(&curse_client, manifest_mod.project_id, manifest_mod.file_id, &cache) {
+                    Ok(m) => Some(m),
+                    Err(_) => {
+                        event!(Level::WARN, "Failed to resolve Curse mode with ID {} and file ID {}, skipping!", manifest_mod.project_id, manifest_mod.file_id);
+                    None},
+                })
                 .collect();
 
             if out_channel.send(resolved).is_err() {
@@ -68,9 +75,7 @@ impl NodeConfig for CurseResolver {
     }
 
     fn generate_channels(&self, node_id: &str) -> HashMap<ChannelId, InputType> {
-        HashMap::from([
-            (ChannelId(node_id.to_owned(), "default".into()), InputType::ResolvedMods(channel(1).0)),
-        ])
+        HashMap::from([(ChannelId(node_id.to_owned(), "default".into()), InputType::ResolvedMods(channel(1).0))])
     }
 }
 
@@ -113,11 +118,7 @@ impl ToString for CacheKey<'_> {
     }
 }
 
-fn get_from_cache(
-    cache: &Option<Arc<dyn Cache>>,
-    namespace: &str,
-    key: &CacheKey,
-) -> Result<Option<ResolvedMod>, ResolveError> {
+fn get_from_cache(cache: &Option<Arc<dyn Cache>>, namespace: &str, key: &CacheKey) -> Result<Option<ResolvedMod>, ResolveError> {
     match cache {
         Some(cache) => {
             let cache_data = cache.get(namespace, &key.to_string())?;
@@ -146,12 +147,7 @@ fn store_in_cache(cache: &Option<Arc<dyn Cache>>, namespace: &str, key: &CacheKe
 
 const CURSE_CACHE_NAMESPACE: &str = "CurseResolver";
 
-fn resolve_curse(
-    client: &CurseClient,
-    mod_id: u32,
-    file_id: u32,
-    cache: &Option<Arc<dyn Cache>>,
-) -> Result<ResolvedMod, ResolveError> {
+fn resolve_curse(client: &CurseClient, mod_id: u32, file_id: u32, cache: &Option<Arc<dyn Cache>>) -> Result<ResolvedMod, ResolveError> {
     let _span = span!(Level::INFO, "Curse", mod_id = mod_id, file_id = file_id).entered();
     let cache_key = CacheKey {
         id: &mod_id.to_string(),
@@ -161,7 +157,8 @@ fn resolve_curse(
         return Ok(cached);
     }
     let mod_response = client.find_mod_by_id(mod_id)?;
-    let file_response = client.get_files(&[file_id])?
+    let file_response = client
+        .get_files(&[file_id])?
         .pop()
         .ok_or_else(|| ResolveError::EmptyOption("popping single file from Curse files by IDs response".to_owned()))?;
     let file_data = download_file(&file_response.download_url)?;
